@@ -2591,3 +2591,484 @@ pre,
     border-radius: 22px;
   }
 }
+
+/* ============================================================
+   2026 UI Refresh Tuning
+   用户反馈：上一版过于夸张、尺寸偏大
+   目标：恢复紧凑密度，保留统一性
+   ============================================================ */
+
+:root {
+  --bg: #f6f8fc;
+  --bg-soft: #eef2f7;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --border: #dbe3ee;
+  --border-strong: #c5d0de;
+  --ink-900: #112033;
+  --ink-700: #334155;
+  --ink-500: #64748b;
+  --ink-400: #94a3b8;
+  --brand: #2563eb;
+  --brand-light: #eaf1ff;
+  --brand-dark: #1d4ed8;
+  --brand-deep: #173b88;
+  --brand-grad: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --brand-grad-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(37, 99, 235, 0.02));
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.16);
+  --shadow-md: 0 16px 36px -24px rgba(15, 23, 42, 0.18);
+  --shadow-lg: 0 20px 40px -28px rgba(15, 23, 42, 0.22);
+  --shadow-xl: 0 28px 60px -34px rgba(15, 23, 42, 0.28);
+  --shadow-brand: 0 12px 30px -20px rgba(37, 99, 235, 0.38);
+}
+
+html, body {
+  font-family: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f6f8fc;
+  color: var(--ink-700);
+}
+
+h1, h2, h3, .login-card__title, .app-brand, .tpl-editor-title, .venue-modal-title, .tpl-list-head, .panel-head {
+  font-family: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.hajimi-shell,
+.app-main,
+.workspace-panel,
+.bet-workspace {
+  background: #f6f8fc;
+}
+
+.hajimi-shell::before {
+  display: none;
+}
+
+.app-header {
+  margin: 8px 8px 0;
+  padding: 10px 14px !important;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 24px -18px rgba(15, 23, 42, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.app-brand {
+  gap: 8px;
+  color: var(--ink-900);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.app-brand img {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+}
+
+.tab-pills {
+  padding: 2px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.tab-pill,
+.tool-btn,
+.btn-icon-only {
+  border-radius: 10px;
+}
+
+.tab-pill {
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--ink-500);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.tab-pill:hover {
+  color: var(--ink-900);
+  background: #f1f5f9;
+}
+
+.tab-pill.active {
+  color: var(--brand-dark);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.tool-btn,
+.btn-icon-only {
+  min-height: 32px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--ink-500);
+  backdrop-filter: none;
+}
+
+.tool-btn {
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.tool-btn:hover,
+.btn-icon-only:hover {
+  background: #f8fafc;
+  color: var(--ink-900);
+  border-color: #e2e8f0;
+}
+
+.tool-btn.active,
+.tool-btn.accent-amber.active,
+.tool-btn.accent-emerald.active,
+.tool-btn.accent-rose.active,
+.tool-btn.accent-sky.active,
+.tool-btn.accent-violet.active {
+  color: #ffffff;
+  background: var(--brand-grad);
+  box-shadow: var(--shadow-brand);
+}
+
+.tool-btn.active::after {
+  display: none;
+}
+
+.user-badge {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: var(--ink-700);
+}
+
+.user-avatar {
+  background: var(--brand-grad);
+  color: #ffffff;
+}
+
+.status-bar {
+  margin: 0 8px 8px;
+  padding: 8px 12px 10px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.scripts-sidebar,
+.chat-panel,
+.composer-panel,
+.panel,
+.tpl-list-panel,
+.tpl-editor,
+.workspace-panel--accounts > div:nth-child(2) table,
+.workspace-panel--training .flex-1 > div,
+.bet-query-card,
+.tracker-dialog,
+.dialog-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: var(--shadow);
+}
+
+.scripts-sidebar,
+.chat-panel,
+.composer-panel,
+.panel,
+.tpl-list-panel,
+.tpl-editor,
+.dialog-card {
+  border-radius: 16px;
+}
+
+.scripts-stage {
+  padding-top: 10px;
+}
+
+.scripts-sidebar {
+  background: #ffffff;
+}
+
+.scripts-sidebar > div:first-child,
+.images-toolbar,
+.workspace-panel--accounts > div:first-child,
+.workspace-panel--data > div:first-child,
+.workspace-panel--training > div:first-child,
+.tpl-toggle-bar {
+  background: #ffffff;
+  color: var(--ink-700);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.workspace-panel--accounts > div:first-child span,
+.workspace-panel--data > div:first-child,
+.workspace-panel--training > div:first-child,
+.images-toolbar {
+  color: var(--ink-700);
+}
+
+.main-input,
+.prompt-editor,
+.notice-textarea,
+.tpl-input,
+.venue-name-input,
+.venue-rules-textarea,
+.login-card__input {
+  background: #ffffff;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  color: var(--ink-900);
+  box-shadow: none;
+}
+
+.main-input,
+.prompt-editor,
+.notice-textarea,
+.tpl-input {
+  font-size: 13px;
+}
+
+.main-input:focus,
+.prompt-editor:focus,
+.notice-textarea:focus,
+.tpl-input:focus,
+.venue-rules-textarea:focus,
+.login-card__input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.btn-primary,
+.tpl-save-btn,
+.venue-save-btn,
+.login-card__submit {
+  background: var(--brand-grad);
+  color: #ffffff;
+  border-radius: 12px;
+  box-shadow: var(--shadow-brand);
+}
+
+.btn-primary {
+  padding: 8px 14px;
+  font-size: 12px;
+}
+
+.btn-primary:hover,
+.tpl-save-btn:hover,
+.venue-save-btn:hover,
+.login-card__submit:hover {
+  box-shadow: 0 14px 28px -22px rgba(37, 99, 235, 0.5);
+}
+
+.btn-secondary,
+.tpl-mode-pill.mng {
+  background: #ffffff;
+  border-color: #dbe3ee;
+  color: var(--ink-700);
+}
+
+.list-card,
+.tpl-card,
+.tracker-modal-item,
+.image-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px -16px rgba(15, 23, 42, 0.16);
+}
+
+.list-card:hover,
+.tpl-card:hover,
+.image-card:hover {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.18);
+}
+
+.list-card.is-active,
+.tpl-card.is-active {
+  background: #f8fbff;
+  border-color: #93c5fd;
+}
+
+.chat-panel,
+.composer-panel {
+  background: #ffffff;
+}
+
+.panel-head,
+.tpl-list-head,
+.tpl-editor-head {
+  background: #f8fafc;
+  color: var(--ink-700);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.panel-head button,
+.tpl-list-head button,
+.tpl-editor-head button {
+  color: var(--ink-500);
+}
+
+.tpl-select-wrap,
+.tpl-preview-card,
+.tpl-edit-wrap-inner,
+.venue-progress,
+.venue-dropzone,
+.widget-box,
+.ticket-card,
+.match-item {
+  border-radius: 14px;
+}
+
+.tpl-select-wrap,
+.tpl-preview-card,
+.tpl-edit-wrap-inner {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+.tpl-select-icon,
+.tpl-editor-title-icon,
+.venue-dropzone-icon,
+.login-card__logo-wrap {
+  background: var(--brand-grad);
+  box-shadow: var(--shadow-brand);
+}
+
+.ticket-card {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+.ticket-status-bar {
+  font-family: "IBM Plex Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0;
+  font-size: 13px;
+}
+
+.ticket-card.is-win .ticket-status-bar {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.ticket-card.is-loss .ticket-status-bar {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.ticket-card.is-pending .ticket-status-bar {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.ticket-card.is-draw .ticket-status-bar {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.ticket-card.is-cancelled .ticket-status-bar {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+
+.match-item,
+.summary-section,
+.bet-info-row,
+.tracker-modal-item {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+.login-bg {
+  background:
+    radial-gradient(800px 400px at 15% 10%, rgba(37, 99, 235, 0.14), transparent 60%),
+    radial-gradient(800px 500px at 85% 90%, rgba(14, 165, 233, 0.12), transparent 60%),
+    linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+}
+
+.login-card {
+  max-width: 460px;
+  padding: 28px 24px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.2);
+  backdrop-filter: blur(18px);
+  color: var(--ink-700);
+}
+
+.login-card__title {
+  color: var(--ink-900);
+  font-size: 30px;
+}
+
+.login-card__subtitle,
+.login-card__label,
+.login-card__footer {
+  color: var(--ink-500);
+}
+
+.dialog-shell {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.dialog-card {
+  border-radius: 18px;
+  border: 1px solid #e2e8f0;
+}
+
+.dialog-card--compact {
+  max-width: 380px;
+}
+
+.dialog-card--form {
+  max-width: 420px;
+}
+
+.dialog-card--debug {
+  max-width: 860px;
+}
+
+.venue-modal,
+.tracker-dialog {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: var(--shadow-xl);
+}
+
+.venue-modal-head {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #c7d2fe, #93c5fd);
+}
+
+textarea,
+pre,
+.font-mono,
+.ticket-footer-meta,
+.status-model-pill {
+  font-family: "IBM Plex Mono", "Menlo", monospace;
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    margin: 6px 6px 0;
+    padding: 8px 10px !important;
+    border-radius: 14px;
+  }
+
+  .scripts-stage {
+    padding-top: 8px;
+  }
+
+  .scripts-sidebar,
+  .chat-panel,
+  .composer-panel,
+  .panel,
+  .tpl-list-panel,
+  .tpl-editor,
+  .dialog-card {
+    border-radius: 14px;
+  }
+}

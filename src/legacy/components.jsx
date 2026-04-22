@@ -17,10 +17,17 @@ export function LoginScreen({ onLogin }) {
     const [code, setCode] = useState('');
     const [status, setStatus] = useState('idle');
     const [errorMessage, setErrorMessage] = useState('');
+    const loginNodes = [
+        { cls: 'login-molecule login-molecule--hero', nodes: [{ cls: 'is-lg is-blue pulse-slow' }, { cls: 'is-md is-red pulse-mid' }, { cls: 'is-xs is-fade pulse-fast' }] },
+        { cls: 'login-molecule login-molecule--top', nodes: [{ cls: 'is-sm is-blue pulse-mid' }, { cls: 'is-xs is-gold pulse-fast' }] },
+        { cls: 'login-molecule login-molecule--right', nodes: [{ cls: 'is-sm is-fade pulse-slow' }, { cls: 'is-lg is-blue pulse-mid' }, { cls: 'is-xs is-fade pulse-fast' }, { cls: 'is-xs is-red pulse-fast' }] },
+        { cls: 'login-molecule login-molecule--bottom', nodes: [{ cls: 'is-md is-blue pulse-slow' }, { cls: 'is-sm is-fade pulse-mid' }] },
+        { cls: 'login-molecule login-molecule--left', nodes: [{ cls: 'is-lg is-blue pulse-slow' }, { cls: 'is-sm is-fade pulse-mid' }] },
+    ];
     const handleLogin = async () => {
         if (!code.trim()) {
             setStatus('error');
-            setErrorMessage('请输入账号或动态码');
+            setErrorMessage('请输入账号');
             return;
         }
 
@@ -42,24 +49,27 @@ export function LoginScreen({ onLogin }) {
         }
     };
     return (
-        <div className="login-bg login-bg--lavender">
-            <div className="login-card fade-in">
-                <div className="login-card__logo-wrap">
-                    <div className="login-card__logo-inner">
-                        <img src="https://lh3.googleusercontent.com/d/1Rri7vVK9YyhQEdqzvgmjQ4kzNZdbQuxV" className="w-full h-full object-contain rounded-2xl" onError={(e) => { e.target.src = "https://via.placeholder.com/64?text=Cat" }} />
-                    </div>
+        <div className="login-bg login-bg--reference">
+            <div className="login-bg__mesh" />
+            {loginNodes.map((molecule, moleculeIndex) => (
+                <div key={moleculeIndex} className={molecule.cls}>
+                    {molecule.nodes.map((node, nodeIndex) => (
+                        <span key={nodeIndex} className={`login-molecule__node ${node.cls}`} />
+                    ))}
                 </div>
-                <h2 className="login-card__title">Welcome back!</h2>
-                <p className="login-card__subtitle">登录哈基米助手，继续你的智能客服与公告工作流</p>
+            ))}
 
-                <label className="login-card__label">账号 / 动态码</label>
+            <div className="login-card login-card--reference fade-in">
+                <h2 className="login-card__title">登录</h2>
+                <p className="login-card__subtitle">登录您的账号</p>
+
                 <div className="login-card__input-wrap">
                     <span className="login-card__input-icon">
-                        <Icon d={PATHS.Lock} />
+                        <Icon d={PATHS.User} />
                     </span>
                     <input
                         type="text"
-                        placeholder="输入账号或 6 位动态码"
+                        placeholder="输入账号"
                         className={`login-card__input ${status === 'error' ? 'is-error' : ''}`}
                         value={code}
                         onChange={e => { setCode(e.target.value); if (status === 'error') { setStatus('idle'); setErrorMessage(''); } }}
@@ -68,10 +78,10 @@ export function LoginScreen({ onLogin }) {
                 </div>
 
                 <button onClick={handleLogin} disabled={status === 'checking'} className="login-card__submit">
-                    {status === 'checking' ? '验证中...' : 'Log In'}
+                    {status === 'checking' ? '登录中' : '登 录'}
                 </button>
                 {status === 'error' && <p className="login-card__error">{errorMessage || '验证失败，请检查输入'}</p>}
-                <div className="login-card__footer">© Hajimi Studio · Pro Max Ultra Plus+</div>
+                <div className="login-card__footer">忘记密码？请联系管理员吧</div>
             </div>
         </div>
     );

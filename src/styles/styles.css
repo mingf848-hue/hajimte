@@ -87,135 +87,348 @@ html, body {
   overscroll-behavior: none;
 }
 
-/* ===== 登录页 —— 渐变舞台 ===== */
+/* ===== 登录页 —— 参考图复刻 ===== */
 .login-bg {
+  position: relative;
   min-height: 100vh;
   height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   padding: 20px;
-  background:
-    radial-gradient(900px 500px at 15% 10%, rgba(139, 92, 246, 0.22), transparent 60%),
-    radial-gradient(800px 500px at 85% 90%, rgba(236, 72, 153, 0.18), transparent 60%),
-    radial-gradient(700px 400px at 50% 50%, rgba(59, 130, 246, 0.12), transparent 65%),
-    linear-gradient(135deg, #f5f7ff 0%, #fdf2f8 100%);
+  background: #f7f8fc;
 }
 
-.login-bg--lavender {
-  background-image:
-    linear-gradient(180deg, rgba(10, 14, 55, 0.45), rgba(16, 14, 60, 0.6)),
-    radial-gradient(1200px 700px at 55% -10%, rgba(133, 92, 248, 0.5), transparent 60%),
-    url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2200&q=80');
-  background-size: cover;
-  background-position: center;
+.login-bg--reference {
+  background:
+    radial-gradient(500px 500px at 50% 50%, rgba(255, 255, 255, 0.72), rgba(247, 248, 252, 0.98) 70%),
+    linear-gradient(180deg, #f8f9fd 0%, #f5f7fb 100%);
+}
+
+.login-bg__mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(240px 240px at 50% 50%, rgba(255,255,255,0.7), transparent 70%);
+}
+
+.login-molecule {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.78;
+  filter: blur(0.2px);
+}
+
+.login-molecule::before,
+.login-molecule::after {
+  content: "";
+  position: absolute;
+  background: rgba(198, 207, 224, 0.42);
+  transform-origin: left center;
+}
+
+.login-molecule__node {
+  position: absolute;
+  border-radius: 999px;
+  border: 1px solid rgba(210, 218, 232, 0.7);
+  background: rgba(255, 255, 255, 0.44);
+  box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.18);
+}
+
+.login-molecule__node::after {
+  content: "";
+  position: absolute;
+  inset: 26%;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.login-molecule__node.is-blue { color: rgba(121, 160, 214, 0.58); }
+.login-molecule__node.is-red { color: rgba(241, 177, 189, 0.72); }
+.login-molecule__node.is-gold { color: rgba(240, 205, 122, 0.82); }
+.login-molecule__node.is-fade { color: rgba(209, 219, 235, 0.7); }
+
+.login-molecule__node.is-lg { width: 44px; height: 44px; }
+.login-molecule__node.is-md { width: 30px; height: 30px; }
+.login-molecule__node.is-sm { width: 18px; height: 18px; box-shadow: 0 0 0 7px rgba(255,255,255,0.16); }
+.login-molecule__node.is-xs { width: 8px; height: 8px; box-shadow: none; border-color: rgba(220, 226, 238, 0.5); }
+
+.login-molecule--hero {
+  top: 44px;
+  left: 42px;
+  width: 250px;
+  height: 190px;
+  animation: moleculeDrift 9s ease-in-out infinite;
+}
+
+.login-molecule--hero::before {
+  left: 28px;
+  top: 18px;
+  width: 158px;
+  height: 1px;
+  transform: rotate(35deg);
+}
+
+.login-molecule--hero::after {
+  left: 182px;
+  top: 114px;
+  width: 30px;
+  height: 1px;
+  transform: rotate(90deg);
+}
+
+.login-molecule--hero .login-molecule__node:nth-child(1) { left: 18px; top: 0; }
+.login-molecule--hero .login-molecule__node:nth-child(2) { right: 18px; bottom: 26px; }
+.login-molecule--hero .login-molecule__node:nth-child(3) { right: 0; bottom: 10px; }
+
+.login-molecule--top {
+  top: -8px;
+  right: 196px;
+  width: 120px;
+  height: 72px;
+  animation: moleculeDrift 11s ease-in-out infinite reverse;
+}
+
+.login-molecule--top::before {
+  left: 14px;
+  top: 24px;
+  width: 44px;
+  height: 1px;
+  transform: rotate(-25deg);
+}
+
+.login-molecule--top::after {
+  display: none;
+}
+
+.login-molecule--top .login-molecule__node:nth-child(1) { right: 8px; top: 0; }
+.login-molecule--top .login-molecule__node:nth-child(2) { left: 0; top: 34px; }
+
+.login-molecule--right {
+  right: 56px;
+  bottom: 138px;
+  width: 264px;
+  height: 180px;
+  animation: moleculeDrift 12s ease-in-out infinite;
+}
+
+.login-molecule--right::before {
+  left: 72px;
+  top: 88px;
+  width: 82px;
+  height: 2px;
+  transform: rotate(90deg);
+}
+
+.login-molecule--right::after {
+  left: 88px;
+  top: 128px;
+  width: 86px;
+  height: 1px;
+  transform: rotate(28deg);
+}
+
+.login-molecule--right .login-molecule__node:nth-child(1) { left: 0; top: 66px; }
+.login-molecule--right .login-molecule__node:nth-child(2) { left: 136px; top: 114px; }
+.login-molecule--right .login-molecule__node:nth-child(3) { left: 42px; top: 120px; }
+.login-molecule--right .login-molecule__node:nth-child(4) { right: 0; bottom: 0; }
+
+.login-molecule--bottom {
+  left: -6px;
+  bottom: 22px;
+  width: 150px;
+  height: 120px;
+  animation: moleculeDrift 10s ease-in-out infinite reverse;
+}
+
+.login-molecule--bottom::before {
+  left: 28px;
+  top: 62px;
+  width: 50px;
+  height: 1px;
+  transform: rotate(34deg);
+}
+
+.login-molecule--bottom::after {
+  display: none;
+}
+
+.login-molecule--bottom .login-molecule__node:nth-child(1) { left: 0; bottom: 22px; }
+.login-molecule--bottom .login-molecule__node:nth-child(2) { left: 78px; top: 0; }
+
+.login-molecule--left {
+  left: 8px;
+  bottom: -8px;
+  width: 186px;
+  height: 118px;
+  animation: moleculeDrift 14s ease-in-out infinite;
+}
+
+.login-molecule--left::before {
+  left: 26px;
+  top: 78px;
+  width: 98px;
+  height: 1px;
+  transform: rotate(-38deg);
+}
+
+.login-molecule--left::after {
+  display: none;
+}
+
+.login-molecule--left .login-molecule__node:nth-child(1) { left: 0; bottom: 0; }
+.login-molecule--left .login-molecule__node:nth-child(2) { left: 124px; top: 4px; }
+
+@keyframes moleculeDrift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -8px, 0); }
+}
+
+.pulse-slow { animation: nodePulse 4.4s ease-in-out infinite; }
+.pulse-mid { animation: nodePulse 3.4s ease-in-out infinite; }
+.pulse-fast { animation: nodePulse 2.3s ease-in-out infinite; }
+
+@keyframes nodePulse {
+  0%, 100% { transform: scale(1); opacity: 0.82; }
+  50% { transform: scale(1.08); opacity: 1; }
 }
 
 .login-card {
   width: 100%;
-  max-width: 520px;
+  position: relative;
+  z-index: 2;
   margin: 16px;
-  border-radius: 28px;
-  padding: 34px 32px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(180deg, rgba(53, 62, 136, 0.56), rgba(46, 41, 106, 0.68));
-  box-shadow: 0 24px 70px -18px rgba(11, 7, 46, 0.75);
-  backdrop-filter: blur(9px);
   display: flex;
   flex-direction: column;
-  color: #edf0ff;
 }
-.login-card__logo-wrap {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  border-radius: 999px;
-  padding: 2px;
-  background: linear-gradient(135deg, rgba(231, 235, 255, 0.85), rgba(212, 175, 255, 0.9));
+
+.login-card--reference {
+  max-width: 376px;
+  min-height: 418px;
+  border-radius: 16px;
+  padding: 42px 44px 30px;
+  border: 1px solid rgba(232, 235, 241, 0.96);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 36px -18px rgba(47, 69, 104, 0.16);
+  backdrop-filter: blur(8px);
+  color: #2b3445;
+  justify-content: center;
 }
+
+.login-card__logo-wrap,
 .login-card__logo-inner {
-  width: 100%;
-  height: 100%;
-  border-radius: 999px;
-  background: #eef2ff;
-  overflow: hidden;
-  padding: 8px;
+  display: none;
 }
+
 .login-card__title {
   margin: 0;
   text-align: center;
-  font-size: clamp(30px, 4vw, 46px);
-  letter-spacing: 0.3px;
-  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  color: #202636;
 }
 .login-card__subtitle {
-  margin: 8px 0 22px;
+  margin: 10px 0 18px;
   text-align: center;
-  color: rgba(238, 241, 255, 0.82);
+  color: #b5bbc6;
   font-size: 14px;
 }
 .login-card__label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  color: rgba(232, 236, 255, 0.9);
-  margin-bottom: 8px;
+  display: none;
 }
 .login-card__input-wrap {
   position: relative;
+  margin-top: 10px;
 }
 .login-card__input-icon {
   position: absolute;
-  left: 14px;
+  left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  color: rgba(238, 241, 255, 0.8);
+  color: #c6ccd6;
+  display: inline-flex;
 }
 .login-card__input {
   width: 100%;
-  border-radius: 16px;
-  border: 1px solid rgba(225, 232, 255, 0.3);
-  background: rgba(28, 30, 75, 0.42);
-  color: #f4f5ff;
+  height: 36px;
+  border-radius: 2px;
+  border: 1px solid #dfe3ea;
+  background: rgba(255, 255, 255, 0.98);
+  color: #4a5565;
   outline: none;
-  padding: 13px 14px 13px 44px;
-  font-size: 15px;
-  transition: border-color .2s ease, box-shadow .2s ease;
+  padding: 0 12px 0 38px;
+  font-size: 13px;
+  transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
 }
-.login-card__input::placeholder { color: rgba(236, 239, 255, 0.55); }
+.login-card__input::placeholder { color: #c1c7d1; }
 .login-card__input:focus {
-  border-color: rgba(190, 200, 255, 0.85);
-  box-shadow: 0 0 0 4px rgba(170, 149, 255, 0.18);
+  border-color: #7eb3f4;
+  box-shadow: 0 0 0 2px rgba(80, 144, 241, 0.08);
 }
-.login-card__input.is-error { border-color: rgba(254, 136, 136, 0.95); }
+.login-card__input.is-error {
+  border-color: rgba(239, 68, 68, 0.58);
+  background: #fffafb;
+}
 .login-card__submit {
   width: 100%;
-  margin-top: 20px;
+  margin-top: 22px;
   border: 0;
-  border-radius: 999px;
-  padding: 13px 16px;
-  font-size: 21px;
+  border-radius: 2px;
+  height: 36px;
+  padding: 0 16px;
+  font-size: 16px;
+  letter-spacing: 2px;
   font-weight: 700;
   cursor: pointer;
-  color: #2b2a44;
-  background: #ffffff;
-  transition: transform .15s ease, opacity .2s ease;
+  color: #ffffff;
+  background: linear-gradient(180deg, #3892f3, #2387ee);
+  box-shadow: 0 6px 14px -10px rgba(35, 135, 238, 0.9);
+  transition: transform .15s ease, opacity .2s ease, box-shadow .2s ease;
 }
-.login-card__submit:hover { transform: translateY(-1px); }
+.login-card__submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 16px -10px rgba(35, 135, 238, 0.9);
+}
 .login-card__submit:active { transform: translateY(0); }
-.login-card__submit:disabled { opacity: .75; cursor: wait; }
+.login-card__submit:disabled { opacity: .75; cursor: wait; box-shadow: none; }
 .login-card__error {
   margin: 10px 0 0;
   font-size: 12px;
-  color: #fecaca;
-  font-weight: 600;
+  color: #e05c5c;
+  font-weight: 500;
   text-align: center;
 }
 .login-card__footer {
-  margin-top: 14px;
-  color: rgba(221, 226, 253, 0.75);
-  font-size: 11px;
+  margin-top: 24px;
+  color: #717987;
+  font-size: 12px;
   text-align: center;
+}
+
+@media (max-width: 640px) {
+  .login-card--reference {
+    max-width: 352px;
+    min-height: 392px;
+    padding: 34px 28px 24px;
+  }
+
+  .login-molecule--hero {
+    transform: scale(0.82);
+    transform-origin: top left;
+    left: 18px;
+    top: 30px;
+  }
+
+  .login-molecule--right {
+    transform: scale(0.72);
+    transform-origin: bottom right;
+    right: 8px;
+    bottom: 118px;
+  }
 }
 
 /* 彩虹文字 —— Pro Max Ultra Plus+ */

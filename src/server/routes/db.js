@@ -25,7 +25,18 @@ export function createDbRouter() {
       const filter = {};
 
       if (req.query.active) filter.active = req.query.active === 'true';
-      if (policy.queryByUser && req.query.user) filter.user = req.query.user;
+      if (policy.queryByUser && req.query.user) {
+        if (req.params.collection === 'scripts') {
+          filter.$or = [
+            { user: req.query.user },
+            { user: { $exists: false } },
+            { user: null },
+            { user: '' },
+          ];
+        } else {
+          filter.user = req.query.user;
+        }
+      }
 
       let query = Model.find(filter);
       if (policy.sort) query = query.sort(policy.sort);

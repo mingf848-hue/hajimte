@@ -27,6 +27,14 @@ const convertOpenAIToGemini = (messages) => {
     return { systemInstruction, contents };
 };
 
+const getAuthToken = () => {
+    try {
+        return localStorage.getItem('hajimi_auth_token');
+    } catch {
+        return null;
+    }
+};
+
 const getCandidateText = (candidate) => {
     const parts = candidate?.content?.parts;
     if (!Array.isArray(parts) || !parts.length) return '';
@@ -58,9 +66,13 @@ const getUpstreamHint = (payload) => {
 export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MODE_FAST, maxOutputTokens) => {
     try {
         const { systemInstruction, contents } = convertOpenAIToGemini(messages);
+        const token = getAuthToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
         const response = await fetch('/api/gemini', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
                 messages: { systemInstruction, contents },
                 mode: mode,
@@ -130,7 +142,7 @@ export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MOD
         if (!fullText) {
             const fallbackResponse = await fetch('/api/gemini', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
                     messages: { systemInstruction, contents },
                     mode: mode,
@@ -165,9 +177,13 @@ export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MOD
 export const callGeminiJSON = async (messages, temp = 0.3, mode = MODE_FAST) => {
     try {
         const { systemInstruction, contents } = convertOpenAIToGemini(messages);
+        const token = getAuthToken();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+
         const response = await fetch('/api/gemini', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
                 messages: { systemInstruction, contents },
                 mode: mode,

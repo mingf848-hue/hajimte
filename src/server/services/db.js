@@ -3,6 +3,7 @@ import { env } from '../lib/env.js';
 import { AppError } from '../lib/errors.js';
 
 let connectionPromise = null;
+let indexEnsurePromise = null;
 
 const dynamicSchema = new mongoose.Schema({ _id: String }, { strict: false });
 
@@ -30,7 +31,21 @@ export async function connectToDatabase() {
   }
 
   await connectionPromise;
+  if (!indexEnsurePromise) {
+    indexEnsurePromise = ensureIndexes().catch(() => {});
+  }
+  await indexEnsurePromise;
   return mongoose.connection;
+}
+
+async function ensureIndexes() {
+  const db = mongoose.connection.db;
+  if (!db) return;
+
+  await Promise.all([
+    db.collection('scripts').createIndex({ user: 1, time: -1 }, { background: true }),
+    db.collection('monitoring').createIndex({ user: 1, time: -1 }, { background: true }),
+  ]);
 }
 
 export function assertCollectionAllowed(collection) {

@@ -12,7 +12,7 @@ import {
     SESSION_TIMEOUT,
 } from './config.jsx';
 import { callGeminiJSON, callGeminiStream } from './api.js';
-import { BetQuery } from './betTracker.jsx';
+import { BetQuery, TrackerModal } from './betTracker.jsx';
 import {
     ChatMessage,
     DebugModal,
@@ -1161,20 +1161,76 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
     };
 
 
+    const deferredSearchTerm = React.useDeferredValue(searchTerm);
     const uniqueCategories = useMemo(() => [...new Set(scripts.map(s => String(s.category || '').trim()).filter(c => c))], [scripts]);
-    const filteredScripts = useMemo(() => scripts.filter(s => { const term = searchTerm.toLowerCase(); const kw = String(s.keywords || '').toLowerCase(); const ct = String(s.content || '').toLowerCase(); const cat = String(s.category || '').toLowerCase(); const matchesSearch = !term || kw.includes(term) || ct.includes(term) || cat.includes(term); const matchesCategory = !selectedCategory || s.category === selectedCategory; return matchesSearch && matchesCategory; }), [searchTerm, scripts, selectedCategory]);
+    const filteredScripts = useMemo(() => scripts.filter(s => { const term = deferredSearchTerm.toLowerCase(); const kw = String(s.keywords || '').toLowerCase(); const ct = String(s.content || '').toLowerCase(); const cat = String(s.category || '').toLowerCase(); const matchesSearch = !term || kw.includes(term) || ct.includes(term) || cat.includes(term); const matchesCategory = !selectedCategory || s.category === selectedCategory; return matchesSearch && matchesCategory; }), [deferredSearchTerm, scripts, selectedCategory]);
     const fuse = useMemo(() => { if (typeof Fuse === 'undefined') return null; return new Fuse(images, { keys: ['title', 'tags'], threshold: 0.4 }); }, [images]);
-    const filteredImages = useMemo(() => { if (searchTerm && images.length && fuse) { return fuse.search(searchTerm).map(r => r.item); } return images; }, [searchTerm, images, fuse]);
+    const filteredImages = useMemo(() => { if (deferredSearchTerm && images.length && fuse) { return fuse.search(deferredSearchTerm).map(r => r.item); } return images; }, [deferredSearchTerm, images, fuse]);
+    const currentTabMeta = useMemo(() => {
+        const map = {
+            scripts: {
+                eyebrow: '客服工作台',
+                title: '话术库与双智能体协作',
+                description: '把脚本检索、对话推理和纠错学习放进同一个高密度工作台。',
+                badge: `${scripts.length} 条话术`,
+            },
+            images: {
+                eyebrow: '素材图库',
+                title: '图片资产与标签检索',
+                description: '用更清晰的视觉网格管理截图、参考图和场馆素材。',
+                badge: `${images.length} 张图片`,
+            },
+            notice: {
+                eyebrow: '公告引擎',
+                title: isTemplateMode ? '模板系统管理' : '公告生成控制台',
+                description: isTemplateMode ? '查看、编辑、沉淀模板，让模板库更像一个可运营的内容系统。' : '从原始通知到三端文案结果，全部集中在同一个输出流里。',
+                badge: `${allTemplates.length} 个模板`,
+            },
+            training: {
+                eyebrow: 'AI 训练',
+                title: '规则与知识库编排',
+                description: '统一管理客服规则、公告基线和业务硬性逻辑。',
+                badge: `${chatLogs.length + annLogs.length} 条训练记录`,
+            },
+            data_management: {
+                eyebrow: '数据审计',
+                title: '训练记录与学习样本',
+                description: '把正负样本、学习结果和清理动作做成可回看的审计视图。',
+                badge: `${chatLogs.length + annLogs.length} 条记录`,
+            },
+            accounts: {
+                eyebrow: '系统权限',
+                title: '账号与角色控制台',
+                description: '集中管理登录身份、OTP 和角色权限。',
+                badge: `${accounts.length} 个账号`,
+            },
+            bets: {
+                eyebrow: '业务后台',
+                title: '注单查询与实时监控',
+                description: '围绕订单排查、赛事结果和实时追踪进行的专用操作页。',
+                badge: `${trackedTickets.length} 条监控`,
+            },
+        };
+        return map[activeTab] || {
+            eyebrow: '控制台',
+            title: '哈基米助手',
+            description: '内部工作流中台。',
+            badge: '在线',
+        };
+    }, [accounts.length, activeTab, allTemplates.length, annLogs.length, chatLogs.length, images.length, isTemplateMode, scripts.length, trackedTickets.length]);
     
     const wmText = `${currentUser || '内部系统'}  禁止外传`;
     const wmSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" transform="rotate(-45, 150, 150)" fill="rgba(100, 116, 139, 0.15)" font-size="16" font-weight="bold" font-family="sans-serif">${wmText}</text></svg>`;
     const wmBackground = `url("data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(wmSvg)))}")`;
     
-    if (authLoading) return <div className="h-screen w-full flex items-center justify-center text-slate-400">正在启动助手...</div>;
+    if (authLoading) return <div className="launch-screen"><div className="launch-screen__orb" /><div className="launch-screen__card"><span className="launch-screen__eyebrow">Hajimi Studio</span><strong>正在启动控制台</strong><span>加载规则、模板与工作区数据...</span></div></div>;
     if (!isAuthorized) return <LoginScreen onLogin={(user, role) => { localStorage.setItem(SESSION_KEY_TIME, Date.now().toString()); localStorage.setItem(SESSION_KEY_USER, user); localStorage.setItem(SESSION_KEY_ROLE, role); setCurrentUser(user); setUserRole(role); setIsAuthorized(true); setLoading(true); loadData(); }} />;
 
     return (
-      <div className="flex flex-col h-screen bg-slate-100 overflow-hidden fade-in pb-8">
+      <div className="app-shell-v2 fade-in">
+      <div className="app-shell-v2__backdrop" />
+      <div className="app-shell-v2__glow app-shell-v2__glow--warm" />
+      <div className="app-shell-v2__glow app-shell-v2__glow--cool" />
       <div style={{ position: 'fixed', inset: 0, zIndex: 9999, pointerEvents: 'none', backgroundImage: wmBackground, backgroundRepeat: 'repeat' }} />
         
         {/* ======================= */}
@@ -1583,13 +1639,15 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
             <NotificationModal title="权限不足" message="您当前是普通用户，无权执行此修改/删除操作。请联系管理员。" type="error" onClose={() => setShowPermissionModal(false)} />
         )}
 
-        <header className="app-header px-3 py-2 flex justify-between items-center z-20 shrink-0">
-          <div className="flex items-center gap-3 overflow-hidden">
+        <header className="app-header z-20 shrink-0">
+          <div className="app-header__inner">
+          <div className="flex items-center gap-3 overflow-hidden min-w-0">
             <h1 className="app-brand shrink-0">
               <img src="https://lh3.googleusercontent.com/d/1Rri7vVK9YyhQEdqzvgmjQ4kzNZdbQuxV" alt="Logo" className="w-7 h-7 object-contain rounded-lg" onError={(e)=>{e.target.src="https://via.placeholder.com/64?text=Cat"}} />
               <span className="hidden xs:inline">哈基米助手</span>
               <span className="dot-grad hidden md:inline-block" title="在线"></span>
             </h1>
+            <div className="app-header__nav">
             <div className="tab-pills overflow-x-auto no-scrollbar max-w-[240px] md:max-w-none">
               <button onClick={() => setActiveTab('scripts')} className={`tab-pill pill-scripts ${activeTab === 'scripts' ? 'active' : ''}`}>
                 <Icon d={PATHS.Chat} className="w-3 h-3"/> 话术对话
@@ -1601,8 +1659,9 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                 <Icon d={PATHS.Magic} className="w-3 h-3"/> 公告
               </button>
             </div>
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="app-header__actions">
               {currentUser && (
                 <div className={`user-badge hidden md:flex ${userRole === 'admin' ? 'admin' : ''}`}>
                   <div className="user-avatar">
@@ -1641,21 +1700,55 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
               <button onClick={handleLogout} className="text-xs text-slate-400 hover:text-red-500 underline hidden md:block">退出</button>
               <button onClick={fetchData} className="btn-icon-only rounded-full">{loading ? <div className="spinner" style={{width:18, height:18, borderWidth:2}}></div> : <Icon d={PATHS.Refresh} className="w-5 h-5"/>}</button>
           </div>
+          </div>
         </header>
+
+        <section className="shell-overview">
+            <div className="shell-overview__copy">
+                <span className="shell-overview__eyebrow">{currentTabMeta.eyebrow}</span>
+                <div className="shell-overview__headline">
+                    <h2>{currentTabMeta.title}</h2>
+                    <span className="shell-overview__badge">{currentTabMeta.badge}</span>
+                </div>
+                <p>{currentTabMeta.description}</p>
+            </div>
+            <div className="shell-overview__stats">
+                <div className="shell-stat-card">
+                    <span>脚本库</span>
+                    <strong>{scripts.length}</strong>
+                    <small>{uniqueCategories.length} 个分类</small>
+                </div>
+                <div className="shell-stat-card">
+                    <span>素材图</span>
+                    <strong>{images.length}</strong>
+                    <small>{filteredImages.length} 条可见结果</small>
+                </div>
+                <div className="shell-stat-card">
+                    <span>模板</span>
+                    <strong>{allTemplates.length}</strong>
+                    <small>{selectedGenTemplateId ? '已锁定模板模式' : '支持 AI 自动匹配'}</small>
+                </div>
+                <div className="shell-stat-card">
+                    <span>监控单</span>
+                    <strong>{trackedTickets.length}</strong>
+                    <small>{hasUnreadUpdates ? '有新的状态变化' : '后台自动刷新中'}</small>
+                </div>
+            </div>
+        </section>
         
-         <main className="relative flex-1 overflow-hidden" style={{background:'#f6f8fc'}}>
+         <main className="app-main">
            
            {/* ===== 账号管理模块 (仅 aratakito) ===== */}
            {activeTab === 'accounts' && currentUser === 'aratakito' && (
-               <div className="absolute inset-0 flex flex-col bg-zinc-50 overflow-hidden z-30">
-                   <div className="bg-white border-b border-zinc-200 px-4 py-2 flex items-center justify-between shrink-0 shadow-sm">
+               <div className="absolute inset-0 flex flex-col studio-page studio-page--table overflow-hidden z-30">
+                   <div className="studio-toolbar">
                        <span className="font-bold text-slate-700 flex items-center gap-2"><Icon d={PATHS.User} className="w-5 h-5 text-pink-500"/> 账号管理</span>
                        <div className="flex gap-2">
                            <button onClick={() => {setAccountForm({ id: null, username: '', role: 'user', secret: '', active: true, note: '' }); setShowAccountModal(true);}} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-900 transition">新增账号</button>
                            <button onClick={fetchAccounts} className="btn-icon-only"><Icon d={PATHS.Refresh} className={`w-4 h-4 ${loading ? 'animate-spin':''}`}/></button>
                        </div>
                    </div>
-                   <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                   <div className="studio-content flex-1 overflow-y-auto p-4 custom-scrollbar">
                        <table className="w-full text-left border-collapse bg-white rounded-xl overflow-hidden shadow-sm">
                            <thead className="bg-zinc-50 text-zinc-500 text-xs">
                                <tr>
@@ -1692,7 +1785,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
 
            {/* ===== 公告管理模块 ===== */}
            {activeTab === 'notice' && (
-            <div className="absolute inset-0 flex flex-col">
+            <div className="absolute inset-0 flex flex-col studio-page studio-page--notice">
               <div className="tpl-toggle-bar shrink-0">
                 <div className="flex items-center gap-2 text-xs font-bold" style={{color:'var(--ink-700)'}}>
                   <span className="dot-grad" style={{width:8,height:8,borderRadius:'50%',background:'var(--brand-grad)'}}></span>
@@ -1847,8 +1940,8 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
 
           {/* ===== 话术/对话模块 (含多智能体) ===== */}
           {activeTab === 'scripts' && (
-             <div className="absolute inset-0 flex flex-col md:flex-row">
-              <section className="w-full md:w-1/3 md:min-w-[320px] bg-white border-b md:border-b-0 md:border-r border-zinc-200 flex flex-col shadow-lg z-10 shrink-0 h-[40%] md:h-full overflow-hidden">
+             <div className="absolute inset-0 flex flex-col md:flex-row page-workbench">
+              <section className="page-workbench__rail w-full md:w-1/3 md:min-w-[320px] flex flex-col z-10 shrink-0 h-[40%] md:h-full overflow-hidden">
                   <div className="p-2 md:p-3 border-b border-zinc-100 flex gap-2">
                       <div className="relative w-1/3 max-w-[130px]">
                         <button onClick={() => setIsCategoryOpen(!isCategoryOpen)} className="w-full h-10 bg-white border border-slate-200 text-slate-700 text-xs rounded-lg px-3 py-2 pr-7 outline-none text-left truncate flex items-center justify-between relative hover:border-indigo-300 transition">
@@ -1900,8 +1993,8 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                   </div>
               </section>
 
-              <section className="flex-1 p-2 md:p-6 flex flex-col gap-2 md:gap-4 min-h-0 relative" style={{background:'radial-gradient(700px 400px at 100% 0%, rgba(99,102,241,0.05), transparent 60%), radial-gradient(600px 400px at 0% 100%, rgba(236,72,153,0.04), transparent 60%), #f6f8fc'}}>
-                  <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 flex flex-col overflow-hidden relative min-h-[30vh]">
+              <section className="page-workbench__stage flex-1 p-2 md:p-6 flex flex-col gap-2 md:gap-4 min-h-0 relative">
+                  <div className="workbench-stage-card flex-1 flex flex-col overflow-hidden relative min-h-[30vh]">
                       <div className="flex-1 p-3 md:p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
                           {chatHistory.length === 0 ? (
                                <div className="h-full flex flex-col items-center justify-center fade-in text-slate-400">
@@ -1945,7 +2038,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                       </div>
                   </div>
 
-                  <div className="bg-white rounded-xl shadow-sm border border-zinc-200 shrink-0 overflow-hidden focus-within:ring-2 ring-blue-100 flex flex-col md:h-auto transition-all">
+                  <div className="workbench-compose-card shrink-0 overflow-hidden flex flex-col md:h-auto transition-all">
                       <div className="px-3 py-2 border-b border-slate-50 bg-zinc-50/50 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                               <Icon d={PATHS.Bot} className="text-slate-400 w-4 h-4"/>
@@ -2028,12 +2121,12 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
 
           {/* ===== 图片管理库 ===== */}
           {activeTab === 'images' && (
-            <section className="absolute inset-0 flex flex-col bg-slate-100">
-                <div className="bg-white p-3 md:p-4 border-b border-zinc-200 flex flex-col md:flex-row gap-3 items-center shadow-sm z-10 shrink-0">
+            <section className="absolute inset-0 flex flex-col studio-page studio-page--gallery">
+                <div className="studio-toolbar flex flex-col md:flex-row gap-3 items-center z-10 shrink-0">
                     <div className="relative w-full md:flex-1 md:max-w-xl"><span className="absolute left-3 top-2.5 text-slate-400"><Icon d={PATHS.Search}/></span><input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜索图片..." className="w-full pl-9 pr-3 py-2 bg-zinc-50 border border-zinc-200 rounded-lg text-sm outline-none" /></div>
                     <div className="flex w-full md:w-auto items-center gap-2 text-sm justify-between"><button onClick={openAddImage} className="hidden md:block px-3 bg-slate-800 text-white text-xs font-bold rounded-lg py-2">上传图片</button></div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-3 md:p-4 relative">
+                <div className="studio-content flex-1 overflow-y-auto p-3 md:p-4 relative">
                     {images.length === 0 && !loading && (<div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 text-xs"><Icon d={PATHS.Image} className="w-8 h-8 mb-2 opacity-50"/>暂无图片数据</div>)}
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 pb-20 md:pb-0">
                         {filteredImages.map(img => (
@@ -2049,8 +2142,8 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
 
           {/* ===== 数据管理模块 ===== */}
           {activeTab === 'data_management' && (
-              <div className="absolute inset-0 flex flex-col bg-zinc-50 overflow-hidden z-30">
-                  <div className="bg-white border-b border-zinc-200 px-4 py-2 flex items-center justify-between shrink-0 shadow-sm">
+              <div className="absolute inset-0 flex flex-col studio-page studio-page--audit overflow-hidden z-30">
+                  <div className="studio-toolbar flex items-center justify-between shrink-0">
                       <div className="flex gap-2">
                           <button onClick={() => setDataMgmtTab('chat')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${dataMgmtTab==='chat' ? 'bg-zinc-800 text-white shadow' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}`}>客服训练记录 ({chatLogs.length})</button>
                           <button onClick={() => setDataMgmtTab('ann')} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${dataMgmtTab==='ann' ? 'bg-zinc-900 text-white shadow-sm' : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'}`}>公告训练记录 ({annLogs.length})</button>
@@ -2060,7 +2153,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                           <button onClick={fetchTrainingLogs} className="btn-icon-only"><Icon d={PATHS.Refresh} className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}/></button>
                       </div>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-4 relative">
+                  <div className="studio-content flex-1 overflow-y-auto p-4 relative">
                       {loading && <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10"><div className="spinner"></div></div>}
                       {((dataMgmtTab === 'chat' && chatLogs.length === 0) || (dataMgmtTab === 'ann' && annLogs.length === 0)) && !loading && (<div className="flex flex-col items-center justify-center h-full text-slate-400 text-xs"><Icon d={PATHS.Database} className="w-8 h-8 mb-2 opacity-50"/>暂无数据记录</div>)}
                       {dataMgmtTab === 'chat' ? (
@@ -2094,10 +2187,10 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
           
           {/* ===== 配置设定/AI训练 ===== */}
           {activeTab === 'training' && (
-            <div className="absolute inset-0 flex flex-col bg-slate-100 overflow-hidden z-30">
-              <div className="bg-white border-b border-zinc-200 px-4 py-2 flex items-center shrink-0 shadow-sm z-10"><button onClick={() => setActiveTab('scripts')} className="text-slate-500 hover:text-slate-800 flex items-center gap-1 text-sm font-bold"><Icon d={PATHS.ArrowLeft} className="w-4 h-4"/> 返回主页</button></div>
-              <div className="flex-1 flex flex-col md:flex-row p-4 gap-4 overflow-hidden min-h-0">
-                  <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 flex flex-col overflow-hidden">
+            <div className="absolute inset-0 flex flex-col studio-page studio-page--training overflow-hidden z-30">
+              <div className="studio-toolbar z-10"><button onClick={() => setActiveTab('scripts')} className="text-slate-500 hover:text-slate-800 flex items-center gap-1 text-sm font-bold"><Icon d={PATHS.ArrowLeft} className="w-4 h-4"/> 返回主页</button></div>
+              <div className="studio-content flex-1 flex flex-col md:flex-row p-4 gap-4 overflow-hidden min-h-0">
+                  <div className="training-surface flex-1 flex flex-col overflow-hidden">
                       <div className="p-3 border-b bg-zinc-50 font-semibold text-zinc-700 text-xs flex justify-between items-center"><span className="flex items-center gap-2"><Icon d={PATHS.Brain}/> 公告生成 AI 设定</span> <div className="flex gap-2"><button onClick={handleResetToDefault} className="bg-zinc-100 text-zinc-500 px-3 py-1 rounded text-[10px] font-bold hover:bg-slate-200 transition">🔄 重置推荐</button></div></div>
                       <div className="flex-1 flex flex-col p-3 overflow-y-auto gap-3">
                            <div><div className="prompt-label">基础人设 (Base Persona - Fixed)</div><textarea className="prompt-editor" style={{minHeight: '200px'}} value={annBase} onChange={e => setAnnBase(e.target.value)} placeholder="输入公告助手的基础设定..."></textarea></div>
@@ -2105,7 +2198,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                       </div>
                       <div className="p-3 border-t"><button onClick={() => handleSaveCloudPrompts('ann')} disabled={isAnnTrainingLoading} className="w-full bg-zinc-800 text-white py-2 rounded font-medium text-xs hover:bg-zinc-900 disabled:opacity-50 flex items-center justify-center gap-2"><Icon d={PATHS.Save} className="w-4 h-4"/> 保存公告设定到云端</button></div>
                   </div>
-                  <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 flex flex-col overflow-hidden">
+                  <div className="training-surface flex-1 flex flex-col overflow-hidden">
                       <div className="p-3 border-b bg-zinc-50 font-bold text-blue-700 text-xs flex justify-between items-center"><span className="flex items-center gap-2"><Icon d={PATHS.Chat}/> 客服回复 AI 设定</span></div>
                       <div className="flex-1 flex flex-col p-3 overflow-y-auto gap-3">
                            <div><div className="prompt-label">基础人设 (Base Persona - Fixed)</div><textarea className="prompt-editor" style={{minHeight: '200px'}} value={chatBase} onChange={e => setChatBase(e.target.value)} placeholder="输入客服专家的基础设定..."></textarea></div>

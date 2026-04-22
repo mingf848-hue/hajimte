@@ -17,10 +17,70 @@ export function LoginScreen({ onLogin }) {
     const [code, setCode] = useState('');
     const [status, setStatus] = useState('idle');
     const [errorMessage, setErrorMessage] = useState('');
+    const loginDecorations = [
+        {
+            cls: 'login-molecule login-molecule--hero',
+            lines: [
+                { x: 40, y: 35, w: 165, r: 34, cls: 'line-main' },
+                { x: 206, y: 132, w: 18, r: 90, cls: 'line-soft' },
+            ],
+            nodes: [
+                { x: 16, y: 0, size: 'lg', tone: 'blue', pulse: 'slow' },
+                { x: 194, y: 126, size: 'md', tone: 'red', pulse: 'mid' },
+                { x: 236, y: 131, size: 'xs', tone: 'fade', pulse: 'fast' },
+                { x: 231, y: 104, size: 'xs', tone: 'red', pulse: 'fast' },
+            ],
+        },
+        {
+            cls: 'login-molecule login-molecule--top',
+            lines: [
+                { x: 16, y: 30, w: 42, r: -28, cls: 'line-gold' },
+            ],
+            nodes: [
+                { x: 0, y: 36, size: 'xs', tone: 'gold', pulse: 'fast' },
+                { x: 58, y: 0, size: 'sm', tone: 'blue', pulse: 'mid' },
+            ],
+        },
+        {
+            cls: 'login-molecule login-molecule--right',
+            lines: [
+                { x: 82, y: 26, w: 100, r: 90, cls: 'line-main' },
+                { x: 86, y: 123, w: 74, r: 30, cls: 'line-main' },
+                { x: 86, y: 124, w: 68, r: -26, cls: 'line-soft' },
+            ],
+            nodes: [
+                { x: 0, y: 66, size: 'xs', tone: 'fade', pulse: 'mid' },
+                { x: 99, y: 114, size: 'lg', tone: 'blue', pulse: 'slow' },
+                { x: 153, y: 164, size: 'xs', tone: 'fade', pulse: 'fast' },
+                { x: 194, y: 148, size: 'xs', tone: 'fade', pulse: 'fast' },
+                { x: 220, y: 171, size: 'xs', tone: 'red', pulse: 'fast' },
+            ],
+        },
+        {
+            cls: 'login-molecule login-molecule--bottom',
+            lines: [
+                { x: 28, y: 67, w: 52, r: 34, cls: 'line-main' },
+            ],
+            nodes: [
+                { x: 0, y: 80, size: 'md', tone: 'blue', pulse: 'slow' },
+                { x: 82, y: 18, size: 'sm', tone: 'fade', pulse: 'mid' },
+            ],
+        },
+        {
+            cls: 'login-molecule login-molecule--left',
+            lines: [
+                { x: 38, y: 75, w: 96, r: -39, cls: 'line-main' },
+            ],
+            nodes: [
+                { x: 0, y: 78, size: 'lg', tone: 'blue', pulse: 'slow' },
+                { x: 133, y: 0, size: 'sm', tone: 'fade', pulse: 'mid' },
+            ],
+        },
+    ];
     const handleLogin = async () => {
         if (!code.trim()) {
             setStatus('error');
-            setErrorMessage('请输入账号或动态码');
+            setErrorMessage('请输入账号');
             return;
         }
 
@@ -42,24 +102,38 @@ export function LoginScreen({ onLogin }) {
         }
     };
     return (
-        <div className="login-bg login-bg--lavender">
-            <div className="login-card fade-in">
-                <div className="login-card__logo-wrap">
-                    <div className="login-card__logo-inner">
-                        <img src="https://lh3.googleusercontent.com/d/1Rri7vVK9YyhQEdqzvgmjQ4kzNZdbQuxV" className="w-full h-full object-contain rounded-2xl" onError={(e) => { e.target.src = "https://via.placeholder.com/64?text=Cat" }} />
-                    </div>
+        <div className="login-bg login-bg--reference">
+            <div className="login-bg__mesh" />
+            {loginDecorations.map((molecule, moleculeIndex) => (
+                <div key={moleculeIndex} className={molecule.cls}>
+                    {molecule.lines.map((line, lineIndex) => (
+                        <span
+                            key={`line-${lineIndex}`}
+                            className={`login-molecule__line ${line.cls}`}
+                            style={{ left: `${line.x}px`, top: `${line.y}px`, width: `${line.w}px`, transform: `rotate(${line.r}deg)` }}
+                        />
+                    ))}
+                    {molecule.nodes.map((node, nodeIndex) => (
+                        <span
+                            key={nodeIndex}
+                            className={`login-molecule__node is-${node.size} is-${node.tone} pulse-${node.pulse}`}
+                            style={{ left: `${node.x}px`, top: `${node.y}px` }}
+                        />
+                    ))}
                 </div>
-                <h2 className="login-card__title">Welcome back!</h2>
-                <p className="login-card__subtitle">登录哈基米助手，继续你的智能客服与公告工作流</p>
+            ))}
 
-                <label className="login-card__label">账号 / 动态码</label>
+            <div className="login-card login-card--reference fade-in">
+                <h2 className="login-card__title">登录</h2>
+                <p className="login-card__subtitle">登录您的账号</p>
+
                 <div className="login-card__input-wrap">
                     <span className="login-card__input-icon">
-                        <Icon d={PATHS.Lock} />
+                        <Icon d={PATHS.User} />
                     </span>
                     <input
                         type="text"
-                        placeholder="输入账号或 6 位动态码"
+                        placeholder="输入账号"
                         className={`login-card__input ${status === 'error' ? 'is-error' : ''}`}
                         value={code}
                         onChange={e => { setCode(e.target.value); if (status === 'error') { setStatus('idle'); setErrorMessage(''); } }}
@@ -68,10 +142,10 @@ export function LoginScreen({ onLogin }) {
                 </div>
 
                 <button onClick={handleLogin} disabled={status === 'checking'} className="login-card__submit">
-                    {status === 'checking' ? '验证中...' : 'Log In'}
+                    {status === 'checking' ? '登录中' : '登 录'}
                 </button>
                 {status === 'error' && <p className="login-card__error">{errorMessage || '验证失败，请检查输入'}</p>}
-                <div className="login-card__footer">© Hajimi Studio · Pro Max Ultra Plus+</div>
+                <div className="login-card__footer">忘记密码？请联系管理员吧</div>
             </div>
         </div>
     );

@@ -117,183 +117,124 @@ html, body {
 .login-molecule {
   position: absolute;
   pointer-events: none;
-  opacity: 0.78;
-  filter: blur(0.2px);
+  opacity: 0.84;
+  filter: blur(0.12px);
 }
 
-.login-molecule::before,
-.login-molecule::after {
-  content: "";
+.login-molecule__line {
   position: absolute;
-  background: rgba(198, 207, 224, 0.42);
+  display: block;
+  height: 1px;
+  background: rgba(205, 214, 228, 0.46);
   transform-origin: left center;
 }
+
+.login-molecule__line.line-soft { opacity: 0.55; }
+.login-molecule__line.line-gold { background: rgba(239, 204, 116, 0.55); }
 
 .login-molecule__node {
   position: absolute;
   border-radius: 999px;
-  border: 1px solid rgba(210, 218, 232, 0.7);
-  background: rgba(255, 255, 255, 0.44);
-  box-shadow: 0 0 0 10px rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(214, 220, 232, 0.82);
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.18);
+}
+
+.login-molecule__node::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255,255,255,0.32), transparent 68%);
+  opacity: 0.8;
 }
 
 .login-molecule__node::after {
   content: "";
   position: absolute;
-  inset: 26%;
+  inset: 24%;
   border-radius: inherit;
   background: currentColor;
-  opacity: 0.9;
+  opacity: 0.88;
 }
 
-.login-molecule__node.is-blue { color: rgba(121, 160, 214, 0.58); }
-.login-molecule__node.is-red { color: rgba(241, 177, 189, 0.72); }
-.login-molecule__node.is-gold { color: rgba(240, 205, 122, 0.82); }
+.login-molecule__node.is-blue { color: rgba(121, 160, 214, 0.62); }
+.login-molecule__node.is-red { color: rgba(241, 177, 189, 0.76); }
+.login-molecule__node.is-gold { color: rgba(240, 205, 122, 0.86); }
 .login-molecule__node.is-fade { color: rgba(209, 219, 235, 0.7); }
 
-.login-molecule__node.is-lg { width: 44px; height: 44px; }
-.login-molecule__node.is-md { width: 30px; height: 30px; }
-.login-molecule__node.is-sm { width: 18px; height: 18px; box-shadow: 0 0 0 7px rgba(255,255,255,0.16); }
-.login-molecule__node.is-xs { width: 8px; height: 8px; box-shadow: none; border-color: rgba(220, 226, 238, 0.5); }
+.login-molecule__node.is-lg { width: 42px; height: 42px; }
+.login-molecule__node.is-md { width: 26px; height: 26px; box-shadow: 0 0 0 7px rgba(255,255,255,0.16); }
+.login-molecule__node.is-sm { width: 18px; height: 18px; box-shadow: 0 0 0 6px rgba(255,255,255,0.14); }
+.login-molecule__node.is-xs { width: 8px; height: 8px; box-shadow: none; border-color: rgba(220, 226, 238, 0.54); }
 
 .login-molecule--hero {
-  top: 44px;
-  left: 42px;
-  width: 250px;
-  height: 190px;
-  animation: moleculeDrift 9s ease-in-out infinite;
+  top: 38px;
+  left: 44px;
+  width: 252px;
+  height: 182px;
+  animation: moleculeFloatHero 8.6s ease-in-out infinite;
 }
-
-.login-molecule--hero::before {
-  left: 28px;
-  top: 18px;
-  width: 158px;
-  height: 1px;
-  transform: rotate(35deg);
-}
-
-.login-molecule--hero::after {
-  left: 182px;
-  top: 114px;
-  width: 30px;
-  height: 1px;
-  transform: rotate(90deg);
-}
-
-.login-molecule--hero .login-molecule__node:nth-child(1) { left: 18px; top: 0; }
-.login-molecule--hero .login-molecule__node:nth-child(2) { right: 18px; bottom: 26px; }
-.login-molecule--hero .login-molecule__node:nth-child(3) { right: 0; bottom: 10px; }
 
 .login-molecule--top {
-  top: -8px;
-  right: 196px;
-  width: 120px;
-  height: 72px;
-  animation: moleculeDrift 11s ease-in-out infinite reverse;
+  top: -2px;
+  right: 250px;
+  width: 88px;
+  height: 64px;
+  animation: moleculeFloatTiny 10.2s ease-in-out infinite;
 }
-
-.login-molecule--top::before {
-  left: 14px;
-  top: 24px;
-  width: 44px;
-  height: 1px;
-  transform: rotate(-25deg);
-}
-
-.login-molecule--top::after {
-  display: none;
-}
-
-.login-molecule--top .login-molecule__node:nth-child(1) { right: 8px; top: 0; }
-.login-molecule--top .login-molecule__node:nth-child(2) { left: 0; top: 34px; }
 
 .login-molecule--right {
-  right: 56px;
-  bottom: 138px;
-  width: 264px;
-  height: 180px;
-  animation: moleculeDrift 12s ease-in-out infinite;
+  right: 40px;
+  bottom: 126px;
+  width: 228px;
+  height: 178px;
+  animation: moleculeFloatRight 11.6s ease-in-out infinite;
 }
-
-.login-molecule--right::before {
-  left: 72px;
-  top: 88px;
-  width: 82px;
-  height: 2px;
-  transform: rotate(90deg);
-}
-
-.login-molecule--right::after {
-  left: 88px;
-  top: 128px;
-  width: 86px;
-  height: 1px;
-  transform: rotate(28deg);
-}
-
-.login-molecule--right .login-molecule__node:nth-child(1) { left: 0; top: 66px; }
-.login-molecule--right .login-molecule__node:nth-child(2) { left: 136px; top: 114px; }
-.login-molecule--right .login-molecule__node:nth-child(3) { left: 42px; top: 120px; }
-.login-molecule--right .login-molecule__node:nth-child(4) { right: 0; bottom: 0; }
 
 .login-molecule--bottom {
-  left: -6px;
-  bottom: 22px;
+  left: -12px;
+  bottom: 16px;
   width: 150px;
   height: 120px;
-  animation: moleculeDrift 10s ease-in-out infinite reverse;
+  animation: moleculeFloatTiny 9.8s ease-in-out infinite;
 }
-
-.login-molecule--bottom::before {
-  left: 28px;
-  top: 62px;
-  width: 50px;
-  height: 1px;
-  transform: rotate(34deg);
-}
-
-.login-molecule--bottom::after {
-  display: none;
-}
-
-.login-molecule--bottom .login-molecule__node:nth-child(1) { left: 0; bottom: 22px; }
-.login-molecule--bottom .login-molecule__node:nth-child(2) { left: 78px; top: 0; }
 
 .login-molecule--left {
   left: 8px;
-  bottom: -8px;
+  bottom: -12px;
   width: 186px;
   height: 118px;
-  animation: moleculeDrift 14s ease-in-out infinite;
+  animation: moleculeFloatLeft 12.8s ease-in-out infinite;
 }
 
-.login-molecule--left::before {
-  left: 26px;
-  top: 78px;
-  width: 98px;
-  height: 1px;
-  transform: rotate(-38deg);
-}
-
-.login-molecule--left::after {
-  display: none;
-}
-
-.login-molecule--left .login-molecule__node:nth-child(1) { left: 0; bottom: 0; }
-.login-molecule--left .login-molecule__node:nth-child(2) { left: 124px; top: 4px; }
-
-@keyframes moleculeDrift {
+@keyframes moleculeFloatHero {
   0%, 100% { transform: translate3d(0, 0, 0); }
-  50% { transform: translate3d(0, -8px, 0); }
+  50% { transform: translate3d(8px, -6px, 0); }
 }
 
-.pulse-slow { animation: nodePulse 4.4s ease-in-out infinite; }
-.pulse-mid { animation: nodePulse 3.4s ease-in-out infinite; }
-.pulse-fast { animation: nodePulse 2.3s ease-in-out infinite; }
+@keyframes moleculeFloatRight {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-6px, -7px, 0); }
+}
+
+@keyframes moleculeFloatLeft {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(6px, -5px, 0); }
+}
+
+@keyframes moleculeFloatTiny {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(4px, -4px, 0); }
+}
+
+.pulse-slow { animation: nodePulse 4.2s ease-in-out infinite; }
+.pulse-mid { animation: nodePulse 3.2s ease-in-out infinite; }
+.pulse-fast { animation: nodePulse 2.1s ease-in-out infinite; }
 
 @keyframes nodePulse {
-  0%, 100% { transform: scale(1); opacity: 0.82; }
-  50% { transform: scale(1.08); opacity: 1; }
+  0%, 100% { transform: scale(1); opacity: 0.84; }
+  50% { transform: scale(1.16); opacity: 1; }
 }
 
 .login-card {
@@ -306,13 +247,13 @@ html, body {
 }
 
 .login-card--reference {
-  max-width: 376px;
+  width: 374px;
   min-height: 418px;
   border-radius: 16px;
-  padding: 42px 44px 30px;
+  padding: 40px 42px 28px;
   border: 1px solid rgba(232, 235, 241, 0.96);
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 14px 36px -18px rgba(47, 69, 104, 0.16);
+  box-shadow: 0 20px 42px -26px rgba(47, 69, 104, 0.18);
   backdrop-filter: blur(8px);
   color: #2b3445;
   justify-content: center;
@@ -326,23 +267,25 @@ html, body {
 .login-card__title {
   margin: 0;
   text-align: center;
-  font-size: 24px;
-  letter-spacing: 1px;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 26px;
+  letter-spacing: 0;
   font-weight: 700;
   color: #202636;
 }
 .login-card__subtitle {
-  margin: 10px 0 18px;
+  margin: 10px 0 22px;
   text-align: center;
   color: #b5bbc6;
-  font-size: 14px;
+  font-size: 13px;
 }
 .login-card__label {
   display: none;
 }
 .login-card__input-wrap {
   position: relative;
-  margin-top: 10px;
+  width: 288px;
+  margin: 0 auto;
 }
 .login-card__input-icon {
   position: absolute;
@@ -374,14 +317,16 @@ html, body {
   background: #fffafb;
 }
 .login-card__submit {
-  width: 100%;
+  width: 288px;
+  margin-left: auto;
+  margin-right: auto;
   margin-top: 22px;
   border: 0;
   border-radius: 2px;
   height: 36px;
   padding: 0 16px;
   font-size: 16px;
-  letter-spacing: 2px;
+  letter-spacing: 8px;
   font-weight: 700;
   cursor: pointer;
   color: #ffffff;
@@ -407,13 +352,19 @@ html, body {
   color: #717987;
   font-size: 12px;
   text-align: center;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 
 @media (max-width: 640px) {
   .login-card--reference {
-    max-width: 352px;
+    width: 352px;
     min-height: 392px;
     padding: 34px 28px 24px;
+  }
+
+  .login-card__input-wrap,
+  .login-card__submit {
+    width: 100%;
   }
 
   .login-molecule--hero {

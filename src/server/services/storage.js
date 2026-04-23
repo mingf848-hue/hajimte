@@ -17,8 +17,13 @@ function isS3Enabled() {
 function getS3Client() {
   if (!isS3Enabled()) return null;
   if (!s3Client) {
+    // AWS SDK v3.525+ treats 'auto' as a trigger for region auto-detection.
+    // In non-AWS environments (Vercel, etc.) detection fails and the signing
+    // region becomes empty, producing a malformed SigV4 credential.
+    // R2 ignores the region value entirely, so any concrete string works.
+    const region = env.S3_REGION === 'auto' ? 'us-east-1' : (env.S3_REGION || 'us-east-1');
     s3Client = new S3Client({
-      region: env.S3_REGION,
+      region,
       endpoint: env.S3_ENDPOINT || undefined,
       forcePathStyle: Boolean(env.S3_ENDPOINT),
       credentials: {

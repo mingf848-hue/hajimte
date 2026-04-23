@@ -151,12 +151,32 @@ export const backendApi = {
             throw new Error('图片过大，Vercel 单次请求上限约 4.5MB，请换小一点的图片');
         }
 
-        const formData = new FormData();
-        formData.append('image', uploadFile);
-        formData.append('title', title || 'img');
-        formData.append('tags', tags);
-        formData.append('time', new Date().toISOString());
-        await apiCall('POST', '/api/upload-image', formData, { isForm: true });
+        const prepared = await apiCall('POST', '/api/upload-image/prepare', {
+            mimeType: uploadFile.type || 'application/octet-stream',
+            originalName: uploadFile.name || 'image.jpg',
+        });
+
+        const uploadResponse = await fetch(prepared.uploadUrl, {
+            method: 'PUT',
+            headers: prepared.headers || {
+                'Content-Type': uploadFile.type || 'application/octet-stream',
+            },
+            body: uploadFile,
+        });
+
+        if (!uploadResponse.ok) {
+            const uploadText = await uploadResponse.text();
+            throw new Error(uploadText || 'R2 upload failed');
+        }
+
+        await apiCall('POST', '/api/upload-image/complete', {
+            title: title || 'img',
+            tags,
+            time: new Date().toISOString(),
+            storageKey: prepared.storageKey,
+            url: prepared.publicUrl,
+            mimeType: uploadFile.type || 'application/octet-stream',
+        });
         return this.getImages();
     },
     async deleteImage(id) {

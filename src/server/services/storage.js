@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../lib/env.js';
 import { AppError } from '../lib/errors.js';
 
@@ -13,6 +14,18 @@ let s3Client = null;
 
 function isS3Enabled() {
   return Boolean(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY);
+}
+
+function buildStorageKey(originalName) {
+  const ext = path.extname(originalName || '') || '.jpg';
+  return `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${ext}`;
+}
+
+function getPublicUrlForKey(key) {
+  const publicBase = env.S3_PUBLIC_BASE_URL;
+  return publicBase
+    ? `${publicBase.replace(/\/$/, '')}/${key}`
+    : null;
 }
 
 function getS3Client() {
@@ -51,8 +64,7 @@ function toStorageError(action, error) {
 }
 
 export async function saveImageObject({ buffer, mimeType, originalName }) {
-  const ext = path.extname(originalName || '') || '.jpg';
-  const key = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${ext}`;
+  const key = buildStorageKey(originalName);
 
   if (isS3Enabled()) {
     const client = getS3Client();
@@ -67,12 +79,7 @@ export async function saveImageObject({ buffer, mimeType, originalName }) {
       throw toStorageError('upload', error);
     }
 
-    const publicBase = env.S3_PUBLIC_BASE_URL;
-    const url = publicBase
-      ? `${publicBase.replace(/\/$/, '')}/${key}`
-      : null;
-
-    return { storageKey: key, url };
+    return { storageKey: key, url: getPublicUrlForKey(key) };
   }
 
   await fs.mkdir(uploadsDir, { recursive: true });
@@ -103,6 +110,34 @@ export async function deleteImageObject(storageKey) {
 
   const fullPath = path.join(uploadsDir, storageKey);
   await fs.rm(fullPath, { force: true });
+}
+
+export async function createImageUploadUrl({ mimeType, originalName }) {
+  if (!isS3Enabled()) {
+    throw new AppError('S3 storage is not configured', 500, 'STORAGE_NOT_CONFIGURED');
+  }
+
+  const key = buildStorageKey(originalName);
+  const client = getS3Client();
+  const command = new PutObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: key,
+    ContentType: mimeType || 'application/octet-stream',
+  });
+
+  try {
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: 600 });
+    return {
+      storageKey: key,
+      uploadUrl,
+      publicUrl: getPublicUrlForKey(key),
+      headers: {
+        'Content-Type': mimeType || 'application/octet-stream',
+      },
+    };
+  } catch (error) {
+    throw toStorageError('presign', error);
+  }
 }
 
 export function getUploadsDir() {

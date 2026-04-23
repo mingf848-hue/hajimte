@@ -63,6 +63,40 @@ const getUpstreamHint = (payload) => {
     return hints.join(' | ');
 };
 
+const consumeBufferedPayload = (rawBuffer, onItem) => {
+    const trimmed = rawBuffer.trim();
+    if (!trimmed) return;
+
+    try {
+        const parsed = JSON.parse(trimmed);
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        items.forEach(onItem);
+        return;
+    } catch (e) {}
+
+    trimmed
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .forEach((line) => {
+            let json = null;
+            if (line.startsWith('data:')) {
+                try {
+                    const jsonStr = line.substring(5).trim();
+                    if (jsonStr) json = JSON.parse(jsonStr);
+                } catch (e) {}
+            } else if (line.startsWith('{') || line.startsWith('[')) {
+                try {
+                    json = JSON.parse(line.startsWith(',') ? line.substring(1) : line);
+                } catch (e) {}
+            }
+
+            if (!json) return;
+            const items = Array.isArray(json) ? json : [json];
+            items.forEach(onItem);
+        });
+};
+
 export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MODE_FAST, maxOutputTokens) => {
     try {
         const { systemInstruction, contents } = convertOpenAIToGemini(messages);
@@ -96,6 +130,16 @@ export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MOD
         let fullText = '';
         let buffer = '';
         let finalUsage = null;
+        const handleStreamItem = (item) => {
+            const text = getCandidateText(item.candidates?.[0]);
+            if (text) {
+                fullText += text;
+                if (onChunk) onChunk(text, fullText);
+            }
+            if (item.usageMetadata) {
+                finalUsage = item.usageMetadata;
+            }
+        };
 
         while (true) {
             const { done, value } = await reader.read();
@@ -124,18 +168,14 @@ export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MOD
 
                 if (json) {
                     const items = Array.isArray(json) ? json : [json];
-                    for (const item of items) {
-                        const text = getCandidateText(item.candidates?.[0]);
-                        if (text) {
-                            fullText += text;
-                            if (onChunk) onChunk(text, fullText);
-                        }
-                        if (item.usageMetadata) {
-                            finalUsage = item.usageMetadata;
-                        }
-                    }
+                    for (const item of items) handleStreamItem(item);
                 }
             }
+        }
+
+        // Vercel/代理层有时会把整个响应压成单块返回，循环里不会留下可分行的数据
+        if (buffer.trim()) {
+            consumeBufferedPayload(buffer, handleStreamItem);
         }
 
         // 某些运行时/代理会导致流式分块不可解析，回退到非流式保证有结果

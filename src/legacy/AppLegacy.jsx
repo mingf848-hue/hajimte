@@ -12,7 +12,7 @@ import {
     SESSION_TIMEOUT,
 } from './config.jsx';
 import { callGeminiJSON, callGeminiStream } from './api.js';
-import { BetQuery } from './betTracker.jsx';
+import { BetQuery, TrackerModal } from './betTracker.jsx';
 import { DBS_API } from './dbsApi.js';
 import {
     ChatMessage,

@@ -158,7 +158,7 @@ export function BetQuery() {
     );
 }
 
-function TrackerModal({ isOpen, onClose, tickets, onDelete, isRefreshing, trackerMsg }) {
+export function TrackerModal({ isOpen, onClose, tickets, onDelete, isRefreshing, trackerMsg }) {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 fade-in" onClick={onClose}>

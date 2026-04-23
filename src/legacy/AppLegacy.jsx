@@ -2142,15 +2142,19 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
          </main>
          <StatusBar usage={lastUsage} cacheMeta={lastCacheMeta} onCleanup={async () => {
              try {
-                 const r = await fetch('/api/cleanup-caches', { method: 'POST' });
-                 const d = await r.json();
-                 if (d.success) {
+                 const d = await window.fbOps.apiCall('POST', '/api/cleanup-caches');
+                 if (d?.success) {
                      setNotification({ title: '孤儿缓存已清理', message: `删除 ${d.deleted} 条历史缓存，保留当前活跃缓存 1 条${d.failed ? `，${d.failed} 条删除失败` : ''}。`, type: 'success' });
                  } else {
                      setNotification({ title: '清理失败', message: d.error || '未知错误', type: 'error' });
                  }
              } catch (e) {
-                 setNotification({ title: '清理失败', message: e.message, type: 'error' });
+                 const msg = e?.message === 'Missing authorization token'
+                     ? '当前登录状态已失效，请重新登录后再清理缓存。'
+                     : e?.message === 'Forbidden'
+                         ? '只有管理员可以清理孤儿缓存。'
+                         : (e?.message || '未知错误');
+                 setNotification({ title: '清理失败', message: msg, type: 'error' });
              }
          }} />
       </div>

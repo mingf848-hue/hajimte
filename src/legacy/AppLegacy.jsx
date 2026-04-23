@@ -62,6 +62,7 @@ function App() {
     const [imageForm, setImageForm] = useState({ file: null, preview: null, title: '', tags: '' });
     const [uploading, setUploading] = useState(false);
     const [viewImage, setViewImage] = useState(null);
+    const [copyingImage, setCopyingImage] = useState(false);
     const [copiedScriptId, setCopiedScriptId] = useState(null);
     const fileInputRef = useRef(null);
     const [rawNotice, setRawNotice] = useState('');
@@ -848,6 +849,34 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
     }, []);
 
     const handleCopy = React.useCallback((text) => { updateActivity(); navigator.clipboard.writeText(text); setNotification({title:'复制成功', message:'', type:'success'}); }, []);
+    const handleCopyImage = React.useCallback(async (image) => {
+        updateActivity();
+        if (!image?.id) return;
+        if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+            setNotification({title:'复制失败', message:'当前浏览器不支持直接复制图片', type:'error'});
+            return;
+        }
+
+        setCopyingImage(true);
+        try {
+            const response = await fetch(`/api/images/${image.id}`);
+            if (!response.ok) {
+                throw new Error('图片读取失败');
+            }
+
+            const blob = await response.blob();
+            await navigator.clipboard.write([
+                new ClipboardItem({
+                    [blob.type || 'image/png']: blob,
+                }),
+            ]);
+            setNotification({title:'复制成功', message:'图片已复制到剪贴板', type:'success'});
+        } catch (e) {
+            setNotification({title:'复制失败', message:e.message || '暂时无法复制图片', type:'error'});
+        } finally {
+            setCopyingImage(false);
+        }
+    }, []);
     const handleCopyScript = (content, id) => { updateActivity(); navigator.clipboard.writeText(content); setCopiedScriptId(id); setSearchTerm(''); setTimeout(() => setCopiedScriptId(null), 1000); };
     const handleAnnFeedback = async (type) => { updateActivity(); if (type === 'bad' && !annCorrectReason.trim()) return setNotification({title: '提示', message: '请填写原因', type: 'error'}); setAnnSubmitStatus('sending'); try { await window.fbOps.saveAnnFeedback({ raw: rawNotice, ...genResult, type, reason: type==='good'?'Keep':annCorrectReason }); setAnnSubmitStatus(type === 'good' ? 'success_good' : 'success_bad'); if(type === 'bad') setAnnCorrectReason(''); setTimeout(() => setAnnSubmitStatus('idle'), 3000); } catch (e) { setNotification({title: '反馈失败', message: e.message, type: 'error'}); setAnnSubmitStatus('idle'); } };
     
@@ -1560,6 +1589,9 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                <div className="mt-4 bg-white/10 border border-white/10 backdrop-blur text-white px-6 py-3 rounded-2xl text-sm flex flex-col items-center gap-2 shadow-2xl" onClick={e => e.stopPropagation()}>
                    <span className="font-bold text-blue-200 text-lg">{viewImage.title || '未命名图片'}</span>
                    <div className="flex gap-2">
+                       <button onClick={() => { handleCopyImage(viewImage); }} disabled={copyingImage} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                           <Icon d={PATHS.Copy} className="w-3 h-3" /> {copyingImage ? '复制中...' : '复制图片'}
+                       </button>
                        <button onClick={() => { handleCopy(viewImage.title); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
                            <Icon d={PATHS.Copy} className="w-3 h-3" /> 复制快捷
                        </button>

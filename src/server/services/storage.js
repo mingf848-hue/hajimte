@@ -3,7 +3,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../lib/env.js';
+import { AppError } from '../lib/errors.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, '../../../storage/uploads');
@@ -12,6 +14,18 @@ let s3Client = null;
 
 function isS3Enabled() {
   return Boolean(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY);
+}
+
+function buildStorageKey(originalName) {
+  const ext = path.extname(originalName || '') || '.jpg';
+  return `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${ext}`;
+}
+
+function getPublicUrlForKey(key) {
+  const publicBase = env.S3_PUBLIC_BASE_URL;
+  return publicBase
+    ? `${publicBase.replace(/\/$/, '')}/${key}`
+    : null;
 }
 
 function getS3Client() {
@@ -32,25 +46,40 @@ function getS3Client() {
   return s3Client;
 }
 
+function toStorageError(action, error) {
+  const status = error?.$metadata?.httpStatusCode || 502;
+  const code = error?.Code || error?.code || 'STORAGE_ERROR';
+  const requestId = error?.$metadata?.requestId || null;
+
+  return new AppError(
+    `Image ${action} failed`,
+    status,
+    code,
+    {
+      provider: 's3',
+      message: error?.message || 'Storage request failed',
+      requestId,
+    },
+  );
+}
+
 export async function saveImageObject({ buffer, mimeType, originalName }) {
-  const ext = path.extname(originalName || '') || '.jpg';
-  const key = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}${ext}`;
+  const key = buildStorageKey(originalName);
 
   if (isS3Enabled()) {
     const client = getS3Client();
-    await client.send(new PutObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: key,
-      Body: buffer,
-      ContentType: mimeType,
-    }));
+    try {
+      await client.send(new PutObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: mimeType,
+      }));
+    } catch (error) {
+      throw toStorageError('upload', error);
+    }
 
-    const publicBase = env.S3_PUBLIC_BASE_URL;
-    const url = publicBase
-      ? `${publicBase.replace(/\/$/, '')}/${key}`
-      : null;
-
-    return { storageKey: key, url };
+    return { storageKey: key, url: getPublicUrlForKey(key) };
   }
 
   await fs.mkdir(uploadsDir, { recursive: true });
@@ -68,15 +97,47 @@ export async function deleteImageObject(storageKey) {
 
   if (isS3Enabled()) {
     const client = getS3Client();
-    await client.send(new DeleteObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: storageKey,
-    }));
+    try {
+      await client.send(new DeleteObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: storageKey,
+      }));
+    } catch (error) {
+      throw toStorageError('delete', error);
+    }
     return;
   }
 
   const fullPath = path.join(uploadsDir, storageKey);
   await fs.rm(fullPath, { force: true });
+}
+
+export async function createImageUploadUrl({ mimeType, originalName }) {
+  if (!isS3Enabled()) {
+    throw new AppError('S3 storage is not configured', 500, 'STORAGE_NOT_CONFIGURED');
+  }
+
+  const key = buildStorageKey(originalName);
+  const client = getS3Client();
+  const command = new PutObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: key,
+    ContentType: mimeType || 'application/octet-stream',
+  });
+
+  try {
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: 600 });
+    return {
+      storageKey: key,
+      uploadUrl,
+      publicUrl: getPublicUrlForKey(key),
+      headers: {
+        'Content-Type': mimeType || 'application/octet-stream',
+      },
+    };
+  } catch (error) {
+    throw toStorageError('presign', error);
+  }
 }
 
 export function getUploadsDir() {
@@ -86,10 +147,15 @@ export function getUploadsDir() {
 export async function getImageBuffer(storageKey) {
   if (isS3Enabled()) {
     const client = getS3Client();
-    const response = await client.send(new GetObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: storageKey,
-    }));
+    let response;
+    try {
+      response = await client.send(new GetObjectCommand({
+        Bucket: env.S3_BUCKET,
+        Key: storageKey,
+      }));
+    } catch (error) {
+      throw toStorageError('read', error);
+    }
     const chunks = [];
     for await (const chunk of response.Body) {
       chunks.push(chunk);

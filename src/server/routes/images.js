@@ -1,11 +1,8 @@
 import { Router } from 'express';
-import multer from 'multer';
 import mongoose from 'mongoose';
 import { AppError } from '../lib/errors.js';
 import { getCollectionModel } from '../services/db.js';
-import { saveImageObject, getImageBuffer } from '../services/storage.js';
-
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+import { createImageUploadUrl, getImageBuffer } from '../services/storage.js';
 
 export function createPublicImageRouter() {
   const router = Router();
@@ -51,27 +48,31 @@ export function createPublicImageRouter() {
 export function createImageUploadRouter() {
   const router = Router();
 
-  router.post('/upload-image', upload.single('image'), async (req, res, next) => {
+  router.post('/upload-image/prepare', async (req, res, next) => {
+    try {
+      const mimeType = req.body?.mimeType || 'application/octet-stream';
+      const originalName = req.body?.originalName || 'image.jpg';
+      const result = await createImageUploadUrl({ mimeType, originalName });
+      res.json({ success: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/upload-image/complete', async (req, res, next) => {
     try {
       const title = req.body?.title || '';
       const tags = req.body?.tags || '';
       const time = req.body?.time || new Date().toISOString();
+      const storageKey = req.body?.storageKey || '';
+      const url = req.body?.url || null;
+      const mimeType = req.body?.mimeType || 'image/jpeg';
+
+      if (!storageKey || !tags) {
+        throw new AppError('Missing storage key or tags', 400, 'INVALID_IMAGE_UPLOAD');
+      }
+
       const ImageModel = getCollectionModel('images');
-
-      let buffer = req.file?.buffer;
-      let mimeType = req.file?.mimetype || 'image/jpeg';
-      let originalName = req.file?.originalname || 'image.jpg';
-
-      if (!buffer && req.body?.imageData) {
-        buffer = Buffer.from(req.body.imageData, 'base64');
-        mimeType = req.body?.mimeType || mimeType;
-      }
-
-      if (!buffer || !tags) {
-        throw new AppError('Missing image data or tags', 400, 'INVALID_IMAGE_UPLOAD');
-      }
-
-      const { storageKey, url } = await saveImageObject({ buffer, mimeType, originalName });
       const id = new mongoose.Types.ObjectId().toString();
 
       await ImageModel.create({

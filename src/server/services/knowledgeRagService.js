@@ -407,108 +407,183 @@ function makeBaseUnit({ sourceCollection, sourceId, domain, category, title, key
   };
 }
 
+const RAG_SOURCE_COLLECTIONS = new Set([
+  'knowledge_base',
+  'scripts',
+  'templates',
+  'training_data',
+  'venue_rules',
+  'global_settings',
+]);
+
+export function isRagSourceCollection(collection) {
+  return RAG_SOURCE_COLLECTIONS.has(collection);
+}
+
+export function buildKnowledgeUnitsForDocument(sourceCollection, doc) {
+  if (!doc?._id || !isRagSourceCollection(sourceCollection)) return [];
+
+  if (sourceCollection === 'knowledge_base') {
+    const unit = makeBaseUnit({
+      sourceCollection,
+      sourceId: doc._id,
+      domain: inferDomainFromCategory(doc.category, doc.keywords, doc.content),
+      category: doc.category,
+      title: doc.keywords,
+      keywords: doc.keywords,
+      content: doc.content,
+      tags: doc.tags,
+    });
+    return unit ? [unit] : [];
+  }
+
+  if (sourceCollection === 'scripts') {
+    const unit = makeBaseUnit({
+      sourceCollection,
+      sourceId: doc._id,
+      domain: inferDomainFromCategory(doc.category, doc.keywords, doc.content, 'internal_template'),
+      category: doc.category,
+      title: doc.keywords,
+      keywords: doc.keywords,
+      content: doc.content,
+    });
+    return unit ? [unit] : [];
+  }
+
+  if (sourceCollection === 'templates') {
+    const content = compactTextParts([doc.front, doc.inner, doc.mail]);
+    const unit = makeBaseUnit({
+      sourceCollection,
+      sourceId: doc._id,
+      domain: 'internal_template',
+      category: doc.type || 'template',
+      title: doc.type,
+      keywords: [doc.type, ...(doc.requiredVars || [])],
+      content,
+      tags: doc.requiredVars,
+    });
+    return unit ? [unit] : [];
+  }
+
+  if (sourceCollection === 'training_data') {
+    if (doc.type && doc.type !== 'good') return [];
+    const content = compactTextParts([`Q: ${doc.question || ''}`, `A: ${doc.answer || ''}`]);
+    const unit = makeBaseUnit({
+      sourceCollection,
+      sourceId: doc._id,
+      domain: inferDomainFromText(content),
+      category: doc.type || 'training',
+      title: doc.question,
+      keywords: doc.question,
+      content,
+      tags: [doc.type],
+    });
+    return unit ? [unit] : [];
+  }
+
+  if (sourceCollection === 'venue_rules') {
+    return splitLongText(doc.name || 'venue_rules', doc.rules || '')
+      .map((section, index) => makeBaseUnit({
+        sourceCollection,
+        sourceId: doc._id,
+        domain: 'venue_issue',
+        category: 'venue_rules',
+        title: section.title,
+        keywords: [doc.name, section.title],
+        content: section.content,
+        venue: doc.name,
+        order: index,
+      }))
+      .filter(Boolean);
+  }
+
+  if (sourceCollection === 'global_settings' && doc._id === 'ai_prompts') {
+    const settingsSections = [
+      ['business_rules', doc.business_rules, 'general_policy'],
+      ['chat_knowledge', doc.chat_knowledge, 'general_policy'],
+      ['ann_knowledge', doc.ann_knowledge, 'general_policy'],
+    ];
+    return settingsSections.flatMap(([name, text, domain]) => (
+      splitLongText(name, text || '', 1200)
+        .map((section, index) => makeBaseUnit({
+          sourceCollection,
+          sourceId: `ai_prompts:${name}`,
+          domain,
+          category: 'global_settings',
+          title: section.title,
+          keywords: [name, section.title],
+          content: section.content,
+          order: index,
+        }))
+        .filter(Boolean)
+    ));
+  }
+
+  return [];
+}
+
+export async function syncKnowledgeUnitsForDocument(sourceCollection, doc) {
+  if (!doc?._id || !isRagSourceCollection(sourceCollection)) return { skipped: true };
+
+  const db = mongoose.connection.db;
+  const collection = db.collection('knowledge_units');
+  const sourceId = String(doc._id);
+  await collection.deleteMany({ sourceCollection, sourceId });
+
+  if (sourceCollection === 'global_settings') {
+    await collection.deleteMany({ sourceCollection, sourceId: /^ai_prompts:/ });
+  }
+
+  let units = buildKnowledgeUnitsForDocument(sourceCollection, { ...doc, _id: sourceId });
+  if (units.length === 0) return { deleted: true, inserted: 0 };
+
+  units = await createEmbeddingsForUnits(units);
+  await collection.bulkWrite(units.map((unit) => ({
+    updateOne: {
+      filter: { _id: unit._id },
+      update: { $set: unit },
+      upsert: true,
+    },
+  })), { ordered: false });
+
+  return { deleted: true, inserted: units.length };
+}
+
+export async function deleteKnowledgeUnitsForDocument(sourceCollection, sourceId) {
+  if (!sourceId || !isRagSourceCollection(sourceCollection)) return { skipped: true };
+  const db = mongoose.connection.db;
+  const result = await db.collection('knowledge_units').deleteMany({
+    sourceCollection,
+    sourceId: String(sourceId),
+  });
+  return { deletedCount: result.deletedCount };
+}
+
 export function buildKnowledgeUnitsFromSnapshot(snapshot) {
   const units = [];
 
   for (const item of snapshot.knowledge_base || []) {
-    const unit = makeBaseUnit({
-      sourceCollection: 'knowledge_base',
-      sourceId: item._id,
-      domain: inferDomainFromCategory(item.category, item.keywords, item.content),
-      category: item.category,
-      title: item.keywords,
-      keywords: item.keywords,
-      content: item.content,
-      tags: item.tags,
-    });
-    if (unit) units.push(unit);
+    units.push(...buildKnowledgeUnitsForDocument('knowledge_base', item));
   }
 
   for (const item of snapshot.scripts || []) {
-    const unit = makeBaseUnit({
-      sourceCollection: 'scripts',
-      sourceId: item._id,
-      domain: inferDomainFromCategory(item.category, item.keywords, item.content, 'internal_template'),
-      category: item.category,
-      title: item.keywords,
-      keywords: item.keywords,
-      content: item.content,
-    });
-    if (unit) units.push(unit);
+    units.push(...buildKnowledgeUnitsForDocument('scripts', item));
   }
 
   for (const item of snapshot.templates || []) {
-    const content = compactTextParts([item.front, item.inner, item.mail]);
-    const unit = makeBaseUnit({
-      sourceCollection: 'templates',
-      sourceId: item._id,
-      domain: 'internal_template',
-      category: item.type || 'template',
-      title: item.type,
-      keywords: [item.type, ...(item.requiredVars || [])],
-      content,
-      tags: item.requiredVars,
-    });
-    if (unit) units.push(unit);
+    units.push(...buildKnowledgeUnitsForDocument('templates', item));
   }
 
   for (const item of snapshot.training_data || []) {
-    if (item.type && item.type !== 'good') continue;
-    const content = compactTextParts([`Q: ${item.question || ''}`, `A: ${item.answer || ''}`]);
-    const unit = makeBaseUnit({
-      sourceCollection: 'training_data',
-      sourceId: item._id,
-      domain: inferDomainFromText(content),
-      category: item.type || 'training',
-      title: item.question,
-      keywords: item.question,
-      content,
-      tags: [item.type],
-    });
-    if (unit) units.push(unit);
+    units.push(...buildKnowledgeUnitsForDocument('training_data', item));
   }
 
   for (const item of snapshot.venue_rules || []) {
-    const sections = splitLongText(item.name || 'venue_rules', item.rules || '');
-    for (const [index, section] of sections.entries()) {
-      const unit = makeBaseUnit({
-        sourceCollection: 'venue_rules',
-        sourceId: item._id,
-        domain: 'venue_issue',
-        category: 'venue_rules',
-        title: section.title,
-        keywords: [item.name, section.title],
-        content: section.content,
-        venue: item.name,
-        order: index,
-      });
-      if (unit) units.push(unit);
-    }
+    units.push(...buildKnowledgeUnitsForDocument('venue_rules', item));
   }
 
   const aiPrompts = (snapshot.global_settings || []).find((item) => item._id === 'ai_prompts') || {};
-  const settingsSections = [
-    ['business_rules', aiPrompts.business_rules, 'general_policy'],
-    ['chat_knowledge', aiPrompts.chat_knowledge, 'general_policy'],
-    ['ann_knowledge', aiPrompts.ann_knowledge, 'general_policy'],
-  ];
-
-  for (const [name, text, domain] of settingsSections) {
-    const sections = splitLongText(name, text || '', 1200);
-    for (const [index, section] of sections.entries()) {
-      const unit = makeBaseUnit({
-        sourceCollection: 'global_settings',
-        sourceId: `ai_prompts:${name}`,
-        domain,
-        category: 'global_settings',
-        title: section.title,
-        keywords: [name, section.title],
-        content: section.content,
-        order: index,
-      });
-      if (unit) units.push(unit);
-    }
-  }
+  units.push(...buildKnowledgeUnitsForDocument('global_settings', aiPrompts));
 
   return units;
 }

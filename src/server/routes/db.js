@@ -3,7 +3,11 @@ import mongoose from 'mongoose';
 import { AppError } from '../lib/errors.js';
 import { assertCollectionAllowed, getCollectionModel } from '../services/db.js';
 import { deleteImageObject } from '../services/storage.js';
-import { retrieveKnowledgeContext } from '../services/knowledgeRagService.js';
+import {
+  deleteKnowledgeUnitsForDocument,
+  retrieveKnowledgeContext,
+  syncKnowledgeUnitsForDocument,
+} from '../services/knowledgeRagService.js';
 
 function hasAccess(policy, action, user) {
   const requiredRole = policy[action] || policy.write || policy.read;
@@ -100,10 +104,12 @@ export function createDbRouter() {
       delete data._id;
 
       if (id && !String(id).startsWith('new_')) {
-        await Model.findByIdAndUpdate(id, { $set: data }, { upsert: true, new: true });
+        const doc = await Model.findByIdAndUpdate(id, { $set: data }, { upsert: true, new: true }).lean();
+        await syncKnowledgeUnitsForDocument(req.params.collection, doc).catch(() => {});
       } else {
         id = new mongoose.Types.ObjectId().toString();
-        await Model.create({ _id: id, ...data });
+        const doc = await Model.create({ _id: id, ...data });
+        await syncKnowledgeUnitsForDocument(req.params.collection, doc.toObject()).catch(() => {});
       }
 
       res.json({ success: true, id });
@@ -123,6 +129,9 @@ export function createDbRouter() {
       const doc = await Model.findByIdAndDelete(req.params.id).lean();
       if (req.params.collection === 'images' && doc?.storageKey) {
         await deleteImageObject(doc.storageKey).catch(() => {});
+      }
+      if (doc?._id) {
+        await deleteKnowledgeUnitsForDocument(req.params.collection, doc._id).catch(() => {});
       }
       res.json({ success: true });
     } catch (error) {

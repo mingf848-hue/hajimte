@@ -10,6 +10,7 @@ const dynamicSchema = new mongoose.Schema({ _id: String }, { strict: false });
 export const collectionPolicies = {
   scripts: { read: 'user', write: 'user', queryByUser: true, sort: { time: -1 } },
   knowledge_base: { read: 'user', write: 'user' },
+  knowledge_units: { read: 'user', write: 'admin' },
   images: { read: 'user', write: 'user', sort: { time: -1 } },
   templates: { read: 'user', write: 'user' },
   monitoring: { read: 'user', write: 'user', queryByUser: true },
@@ -49,6 +50,12 @@ async function ensureIndexes() {
     db.collection('images').createIndex({ time: -1 }, { background: true }),
     db.collection('announcement_logs').createIndex({ time: -1 }, { background: true }),
     db.collection('training_data').createIndex({ time: -1 }, { background: true }),
+    db.collection('knowledge_units').createIndex({ domain: 1, enabled: 1, sourceCollection: 1 }, { background: true }),
+    db.collection('knowledge_units').createIndex({ venue: 1, enabled: 1 }, { background: true }),
+    db.collection('knowledge_units').createIndex(
+      { title: 'text', content: 'text', keywordsText: 'text', tagsText: 'text' },
+      { background: true, name: 'knowledge_units_text_fallback' },
+    ),
     // Used in login: findOne({username, active:true})
     db.collection('access_keys').createIndex({ username: 1, active: 1 }, { background: true }),
   ]);

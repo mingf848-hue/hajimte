@@ -659,6 +659,26 @@ function App() {
            *注意：请结合你的【核心人设】和【处理紧急问题规则】，自行判断如何回复。不要暴露你的思考过程，直接给出回复。如果注单未结算，在结尾加入 <<<ACTION_TRACK>>> 触发监控。涉及场馆规则、盘口规则、赔率计算、结算细则的问题，必须严格依据 System Prompt 中《场馆规则库》里的对应条款回答，不得编造或脑补。*
            `;
 
+           let ragContext = { domain: 'general_policy', retrievalMode: 'none', results: [], prompt: '无' };
+           try {
+               ragContext = await window.fbOps.retrieveRagContext(currentUserMsg, {
+                   coreIntent: triageResult.core_intent,
+                   venue: matchedVenue?.name || '',
+               });
+           } catch (ragError) {
+               console.warn('RAG retrieval failed:', ragError);
+           }
+
+           dynamicContext += `
+
+           【RAG 检索结果】：
+           - 检索域：${ragContext.domain || 'general_policy'}
+           - 检索模式：${ragContext.retrievalMode || 'fallback'}
+           - 命中知识条数：${Array.isArray(ragContext.results) ? ragContext.results.length : 0}
+           - 命中知识详情：
+           ${ragContext.prompt || '无'}
+           `;
+
            let redLinesContext = "";
            const recentBads = trainingDataRef.current.filter(l => l.type === 'bad' && l.correction).slice(0, 3);
            if (recentBads.length > 0) {
@@ -667,23 +687,11 @@ function App() {
 
            setAiPhase('execution');
 
-           const currentScriptLib = scripts.map(s => `[${s.keywords || '通用'}]: ${s.content}`).join("\n");
-           const hiddenDocs = extraKnowledge.map(k => `[${k.keywords}]: ${k.content}`).join("\n");
-
-           const venueSection = matchedVenue?.rules?.trim()
-               ? `\n\n### 命中场馆规则 (Venue Rules — 仅注入当前相关场馆)\n#### 【${matchedVenue.name}】\n${matchedVenue.rules}`
-               : '';
-
            const staticSystemPrompt = `
            ${chatBase}
 
            ### 业务硬性逻辑 (Business Rules)
            ${businessRules}
-
-           ### 话术库与知识库
-           ${chatKnowledge}
-           ${currentScriptLib}
-           ${hiddenDocs}${venueSection}
            `;
 
            const executionUserPrompt = `

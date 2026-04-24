@@ -132,6 +132,7 @@ export const backendApi = {
         const user = localStorage.getItem('hajimi_username') || 'Unknown';
         return apiCall('GET', `/api/db/scripts?user=${encodeURIComponent(user)}`);
     },
+    retrieveRagContext: async (query, options = {}) => apiCall('POST', '/api/db/rag/retrieve', { query, ...options }),
     async saveScript(s) {
         const user = localStorage.getItem('hajimi_username') || 'Unknown';
         const payload = { category: s.category, keywords: s.keywords, content: s.content, time: new Date().toLocaleString(), id: s.id, user };

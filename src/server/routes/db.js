@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { AppError } from '../lib/errors.js';
 import { assertCollectionAllowed, getCollectionModel } from '../services/db.js';
 import { deleteImageObject } from '../services/storage.js';
+import { retrieveKnowledgeContext } from '../services/knowledgeRagService.js';
 
 function hasAccess(policy, action, user) {
   const requiredRole = policy[action] || policy.write || policy.read;
@@ -13,6 +14,26 @@ function hasAccess(policy, action, user) {
 
 export function createDbRouter() {
   const router = Router();
+
+  router.post('/rag/retrieve', async (req, res, next) => {
+    try {
+      const { query, coreIntent, venue, limit } = req.body || {};
+      if (!query || typeof query !== 'string') {
+        throw new AppError('Missing query', 400, 'MISSING_QUERY');
+      }
+
+      const result = await retrieveKnowledgeContext({
+        query,
+        coreIntent: typeof coreIntent === 'string' ? coreIntent : '',
+        venue: typeof venue === 'string' ? venue : '',
+        limit: Number(limit) > 0 ? Number(limit) : undefined,
+      });
+
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/:collection', async (req, res, next) => {
     try {

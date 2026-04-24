@@ -10,7 +10,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "node server.js"
+    "start": "node server.js",
+    "rag:migrate": "node scripts/migrate-rag-knowledge.mjs",
+    "rag:migrate:embed": "node scripts/migrate-rag-knowledge.mjs --with-embeddings"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1034.0",

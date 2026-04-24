@@ -529,6 +529,21 @@ function App() {
         return 'OTHER';
     }, []);
 
+    const getInstantFaqReply = React.useCallback((text, hasImages) => {
+        if (hasImages || typeof text !== 'string') return null;
+        const normalized = text.replace(/\s+/g, '');
+
+        if (/(账号|账户).*(登不上|登录不了|无法登录|登录不上|登不进|进不去)|无法登录|登录失败/.test(normalized)) {
+            return `账号无法登录请按以下情况排查：
+1. 忘记密码：请在登录页使用“忘记密码”功能重置。
+2. 网络限制：尝试切换网络或使用爱加速VPN（全局模式，避开河南、安徽、湖北、重庆、广东、福建、江苏、甘肃、浙江地区）。
+3. 账号未绑定手机：若账户内有余额且未绑定手机号，请联系在线客服协助绑定。
+4. 报错提示：若系统有明确报错代码或提示，请提供截图以便定位问题。`;
+        }
+
+        return null;
+    }, []);
+
     const handleCallAI = async () => { 
         updateActivity(); 
         if (!customerInput.trim() && pastedImages.length === 0) return; 
@@ -569,6 +584,15 @@ function App() {
                 : 'AI 本次没有返回可显示内容，请直接重试一次；如果频繁出现，请检查 Vercel 函数日志中的超时或上游空响应。';
             updateAssistantMessage(safeContent, triageData);
         };
+
+        const instantFaqReply = getInstantFaqReply(currentUserMsg, currentImages.length > 0);
+        if (instantFaqReply) {
+            setAiReply(instantFaqReply);
+            finalizeAssistantMessage(instantFaqReply);
+            setAiPhase('');
+            setAiLoading(false);
+            return;
+        }
 
         try {
            const directVenueMatch = findDirectVenueMatch(currentUserMsg);

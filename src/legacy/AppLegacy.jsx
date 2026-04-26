@@ -1253,16 +1253,11 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
     const fuse = useMemo(() => { if (typeof Fuse === 'undefined') return null; return new Fuse(images, { keys: ['title', 'tags'], threshold: 0.4 }); }, [images]);
     const filteredImages = useMemo(() => { if (searchTerm && images.length && fuse) { return fuse.search(searchTerm).map(r => r.item); } return images; }, [searchTerm, images, fuse]);
     
-    const wmText = `${currentUser || '内部系统'}  禁止外传`;
-    const wmSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" transform="rotate(-45, 150, 150)" fill="rgba(100, 116, 139, 0.15)" font-size="16" font-weight="bold" font-family="sans-serif">${wmText}</text></svg>`;
-    const wmBackground = `url("data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(wmSvg)))}")`;
-    
     if (authLoading) return <div className="h-screen w-full flex items-center justify-center text-slate-400">正在启动助手...</div>;
     if (!isAuthorized) return <LoginScreen onLogin={(user, role) => { localStorage.setItem(SESSION_KEY_TIME, Date.now().toString()); localStorage.setItem(SESSION_KEY_USER, user); localStorage.setItem(SESSION_KEY_ROLE, role); setCurrentUser(user); setUserRole(role); setIsAuthorized(true); setLoading(true); loadData(); }} />;
 
     return (
       <div className="flex flex-col h-screen bg-slate-100 overflow-hidden fade-in pb-8">
-      <div style={{ position: 'fixed', inset: 0, zIndex: 9999, pointerEvents: 'none', backgroundImage: wmBackground, backgroundRepeat: 'repeat' }} />
         
         {/* ======================= */}
         {/* 全局弹窗区 */}
@@ -2000,7 +1995,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                       <div className="flex-1 p-3 md:p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
                           {chatHistory.length === 0 ? (
                                <div className="h-full flex flex-col items-center justify-center fade-in text-slate-400">
-                                   <Icon d={PATHS.Bot} className="w-10 h-10 mb-2 opacity-20"/>
+                                   <img src="/logo.png" className="w-32 h-32 mb-3 object-contain" alt="logo"/>
                                    <span className="text-sm font-bold text-slate-500">智能对话助手</span>
                                    <span className="text-xs mt-1 text-center max-w-xs">开始对话来获得专业的建议和协助<br/>有任何疑问，尽管提问</span>
                                </div>

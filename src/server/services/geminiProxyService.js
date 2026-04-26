@@ -1,6 +1,5 @@
 import { env } from '../lib/env.js';
 import { AppError } from '../lib/errors.js';
-import { ensureGeminiCache, invalidateGeminiCache } from './geminiCacheService.js';
 
 function extractJSON(buffer) {
   const results = [];
@@ -59,17 +58,15 @@ async function sendGeminiRequest({ body, stream }) {
   }
 }
 
-function buildRequestPayload({ messages, temperature, maxOutputTokens, mode, cachedContent }) {
+function buildRequestPayload({ messages, temperature, maxOutputTokens, mode }) {
   return {
     contents: messages.contents,
+    systemInstruction: messages.systemInstruction,
     generationConfig: {
       temperature: temperature || 0.4,
       maxOutputTokens: maxOutputTokens || 8000,
       thinkingConfig: { thinkingLevel: mode === 'think' ? 'high' : 'low' },
     },
-    ...(cachedContent
-      ? { cachedContent }
-      : { systemInstruction: messages.systemInstruction }),
   };
 }
 
@@ -79,28 +76,15 @@ export async function proxyGeminiRequest(req, res) {
   }
 
   const { messages, stream, temperature, mode, maxOutputTokens } = req.body || {};
-  const systemPrompt = messages?.systemInstruction?.parts?.[0]?.text || '';
-  const { cache, action } = await ensureGeminiCache(systemPrompt);
 
-  let cacheAction = action;
-  let response = await sendGeminiRequest({
-    body: buildRequestPayload({ messages, temperature, maxOutputTokens, mode, cachedContent: cache?.id || null }),
+  const response = await sendGeminiRequest({
+    body: buildRequestPayload({ messages, temperature, maxOutputTokens, mode }),
     stream,
   });
 
-  if (cache?.id && (response.status === 403 || response.status === 404)) {
-    await invalidateGeminiCache();
-    cacheAction = 'failed';
-    response = await sendGeminiRequest({
-      body: buildRequestPayload({ messages, temperature, maxOutputTokens, mode }),
-      stream,
-    });
-  }
-
-  res.setHeader('X-Cache-Action', cacheAction);
   res.setHeader('X-Cache-Model', env.GEMINI_MODEL);
   res.setHeader('X-Cache-Thinking', mode === 'think' ? 'high' : 'low');
-  res.setHeader('Access-Control-Expose-Headers', 'X-Cache-Action, X-Cache-Model, X-Cache-Thinking');
+  res.setHeader('Access-Control-Expose-Headers', 'X-Cache-Model, X-Cache-Thinking');
 
   if (!response.ok) {
     const text = await response.text();

@@ -19,7 +19,6 @@ export const collectionPolicies = {
   global_settings: { read: 'user', write: 'user' },
   access_keys: { read: 'admin', write: 'admin' },
   venue_rules: { read: 'user', write: 'user' },
-  gemini_cache_pool: { read: 'admin', write: 'admin' },
 };
 
 export async function connectToDatabase() {

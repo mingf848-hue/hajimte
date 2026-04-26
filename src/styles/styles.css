@@ -87,7 +87,7 @@ html, body {
   overscroll-behavior: none;
 }
 
-/* ===== 登录页 —— 渐变舞台 ===== */
+/* ===== 登录页 —— 液态玻璃 ===== */
 .login-bg {
   min-height: 100vh;
   height: 100vh;
@@ -95,70 +95,109 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background:
-    radial-gradient(900px 500px at 15% 10%, rgba(139, 92, 246, 0.22), transparent 60%),
-    radial-gradient(800px 500px at 85% 90%, rgba(236, 72, 153, 0.18), transparent 60%),
-    radial-gradient(700px 400px at 50% 50%, rgba(59, 130, 246, 0.12), transparent 65%),
-    linear-gradient(135deg, #f5f7ff 0%, #fdf2f8 100%);
+  position: relative;
+  overflow: hidden;
 }
 
 .login-bg--lavender {
-  background-image:
-    linear-gradient(180deg, rgba(10, 14, 55, 0.45), rgba(16, 14, 60, 0.6)),
-    radial-gradient(1200px 700px at 55% -10%, rgba(133, 92, 248, 0.5), transparent 60%),
-    url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=2200&q=80');
-  background-size: cover;
-  background-position: center;
+  background:
+    radial-gradient(circle at 20% 20%, #8b5cf6 0%, transparent 50%),
+    radial-gradient(circle at 80% 30%, #ec4899 0%, transparent 50%),
+    radial-gradient(circle at 50% 80%, #6366f1 0%, transparent 50%),
+    linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+}
+
+/* 浮动光斑 - 增强液态感 */
+.login-bg::before,
+.login-bg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.6;
+  pointer-events: none;
+  animation: floatBlob 20s ease-in-out infinite;
+}
+.login-bg::before {
+  width: 480px; height: 480px;
+  top: -120px; left: -120px;
+  background: radial-gradient(circle, #a78bfa 0%, transparent 70%);
+}
+.login-bg::after {
+  width: 520px; height: 520px;
+  bottom: -160px; right: -140px;
+  background: radial-gradient(circle, #f472b6 0%, transparent 70%);
+  animation-delay: -10s;
+}
+@keyframes floatBlob {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.08); }
+  66% { transform: translate(-30px, 40px) scale(0.95); }
 }
 
 .login-card {
+  position: relative;
   width: 100%;
-  max-width: 520px;
-  margin: 16px;
-  border-radius: 28px;
-  padding: 34px 32px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: linear-gradient(180deg, rgba(53, 62, 136, 0.56), rgba(46, 41, 106, 0.68));
-  box-shadow: 0 24px 70px -18px rgba(11, 7, 46, 0.75);
-  backdrop-filter: blur(9px);
+  max-width: 380px;
+  border-radius: 24px;
+  padding: 36px 32px 26px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 32px 0 rgba(31, 38, 135, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   display: flex;
   flex-direction: column;
-  color: #edf0ff;
+  color: #f5f3ff;
+  z-index: 1;
 }
 .login-card__logo-wrap {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 16px;
-  border-radius: 999px;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 18px;
+  border-radius: 22px;
   padding: 2px;
-  background: linear-gradient(135deg, rgba(231, 235, 255, 0.85), rgba(212, 175, 255, 0.9));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(167, 139, 250, 0.4));
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35);
 }
 .login-card__logo-inner {
   width: 100%;
   height: 100%;
-  border-radius: 999px;
-  background: #eef2ff;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.95);
   overflow: hidden;
-  padding: 8px;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .login-card__title {
   margin: 0;
   text-align: center;
-  font-size: clamp(30px, 4vw, 46px);
-  letter-spacing: 0.3px;
-  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: -0.5px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #ffffff 0%, #c4b5fd 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 .login-card__subtitle {
-  margin: 8px 0 22px;
+  margin: 6px 0 26px;
   text-align: center;
-  color: rgba(238, 241, 255, 0.82);
-  font-size: 14px;
+  color: rgba(229, 231, 255, 0.65);
+  font-size: 13px;
+  line-height: 1.5;
 }
 .login-card__label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  color: rgba(232, 236, 255, 0.9);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.9);
   margin-bottom: 8px;
 }
 .login-card__input-wrap {
@@ -166,56 +205,72 @@ html, body {
 }
 .login-card__input-icon {
   position: absolute;
-  left: 14px;
+  left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  color: rgba(238, 241, 255, 0.8);
+  color: rgba(196, 181, 253, 0.75);
+  pointer-events: none;
 }
 .login-card__input {
   width: 100%;
-  border-radius: 16px;
-  border: 1px solid rgba(225, 232, 255, 0.3);
-  background: rgba(28, 30, 75, 0.42);
-  color: #f4f5ff;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f5f3ff;
   outline: none;
-  padding: 13px 14px 13px 44px;
-  font-size: 15px;
-  transition: border-color .2s ease, box-shadow .2s ease;
+  padding: 14px 16px 14px 46px;
+  font-size: 14px;
+  transition: all .25s ease;
+  backdrop-filter: blur(8px);
 }
-.login-card__input::placeholder { color: rgba(236, 239, 255, 0.55); }
+.login-card__input::placeholder { color: rgba(229, 231, 255, 0.4); }
 .login-card__input:focus {
-  border-color: rgba(190, 200, 255, 0.85);
-  box-shadow: 0 0 0 4px rgba(170, 149, 255, 0.18);
+  border-color: rgba(167, 139, 250, 0.6);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.15);
 }
-.login-card__input.is-error { border-color: rgba(254, 136, 136, 0.95); }
+.login-card__input.is-error {
+  border-color: rgba(248, 113, 113, 0.7);
+  box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.12);
+}
 .login-card__submit {
   width: 100%;
-  margin-top: 20px;
+  margin-top: 22px;
   border: 0;
-  border-radius: 999px;
-  padding: 13px 16px;
-  font-size: 21px;
-  font-weight: 700;
-  cursor: pointer;
-  color: #2b2a44;
-  background: #ffffff;
-  transition: transform .15s ease, opacity .2s ease;
-}
-.login-card__submit:hover { transform: translateY(-1px); }
-.login-card__submit:active { transform: translateY(0); }
-.login-card__submit:disabled { opacity: .75; cursor: wait; }
-.login-card__error {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: #fecaca;
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  color: #ffffff;
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  box-shadow:
+    0 8px 24px rgba(139, 92, 246, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all .25s ease;
+}
+.login-card__submit:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 12px 28px rgba(139, 92, 246, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.login-card__submit:active { transform: translateY(0); }
+.login-card__submit:disabled { opacity: .7; cursor: wait; transform: none; }
+.login-card__error {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #fca5a5;
+  font-weight: 500;
   text-align: center;
 }
 .login-card__footer {
-  margin-top: 14px;
-  color: rgba(221, 226, 253, 0.75);
+  margin-top: 18px;
+  color: rgba(196, 181, 253, 0.55);
   font-size: 11px;
   text-align: center;
+  letter-spacing: 0.3px;
 }
 
 /* 彩虹文字 —— Pro Max Ultra Plus+ */

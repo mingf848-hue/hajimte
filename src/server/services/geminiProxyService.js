@@ -58,8 +58,8 @@ async function sendGeminiRequest({ body, stream }) {
   }
 }
 
-function buildRequestPayload({ messages, temperature, maxOutputTokens, mode }) {
-  return {
+function buildRequestPayload({ messages, temperature, maxOutputTokens, mode, responseMimeType }) {
+  const payload = {
     contents: messages.contents,
     systemInstruction: messages.systemInstruction,
     generationConfig: {
@@ -68,6 +68,12 @@ function buildRequestPayload({ messages, temperature, maxOutputTokens, mode }) {
       thinkingConfig: { thinkingLevel: mode === 'think' ? 'high' : 'low' },
     },
   };
+
+  if (responseMimeType) {
+    payload.generationConfig.responseMimeType = responseMimeType;
+  }
+
+  return payload;
 }
 
 export async function proxyGeminiRequest(req, res) {
@@ -75,16 +81,17 @@ export async function proxyGeminiRequest(req, res) {
     throw new AppError('Missing GEMINI_API_KEY', 500, 'MISSING_GEMINI_API_KEY');
   }
 
-  const { messages, stream, temperature, mode, maxOutputTokens } = req.body || {};
+  const { messages, stream, temperature, mode, maxOutputTokens, responseMimeType } = req.body || {};
 
   const response = await sendGeminiRequest({
-    body: buildRequestPayload({ messages, temperature, maxOutputTokens, mode }),
+    body: buildRequestPayload({ messages, temperature, maxOutputTokens, mode, responseMimeType }),
     stream,
   });
 
   res.setHeader('X-Cache-Model', env.GEMINI_MODEL);
   res.setHeader('X-Cache-Thinking', mode === 'think' ? 'high' : 'low');
-  res.setHeader('Access-Control-Expose-Headers', 'X-Cache-Model, X-Cache-Thinking');
+  res.setHeader('X-Cache-Action', 'skipped');
+  res.setHeader('Access-Control-Expose-Headers', 'X-Cache-Model, X-Cache-Thinking, X-Cache-Action');
 
   if (!response.ok) {
     const text = await response.text();

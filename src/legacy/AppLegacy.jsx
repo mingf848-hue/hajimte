@@ -54,6 +54,7 @@ function App() {
     const [aiReply, setAiReply] = useState('');
     const [aiPhase, setAiPhase] = useState(''); // 'triage' | 'execution' | ''
     const [aiLoading, setAiLoading] = useState(false);
+    const [chatPromptMode, setChatPromptMode] = useState('strict'); // 'strict' | 'free'
     const [scriptForm, setScriptForm] = useState({ id: '', category: '', keywords: '', content: '' });
     const [saveStatus, setSaveStatus] = useState('idle');
     const [feedbackState, setFeedbackState] = useState('none');
@@ -93,10 +94,8 @@ function App() {
     const mailRef = useRef(null);
     const innerRef = useRef(null);
     const [chatBase, setChatBase] = useState('');
-    const [chatKnowledge, setChatKnowledge] = useState('');
     const [annBase, setAnnBase] = useState('');
     const [annKnowledge, setAnnKnowledge] = useState('');
-    const [chatStaticContext, setChatStaticContext] = useState(''); 
     const [annStaticContext, setAnnStaticContext] = useState(''); 
     const [showPermissionModal, setShowPermissionModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -105,7 +104,6 @@ function App() {
     const [pendingDelete, setPendingDelete] = useState(null); 
     const [isCategoryOpen, setIsCategoryOpen] = useState(false);
     const [isAnnTrainingLoading, setIsAnnTrainingLoading] = useState(false);
-    const [isChatTrainingLoading, setIsChatTrainingLoading] = useState(false);
     const [saveConfirmType, setSaveConfirmType] = useState(null);
     const [notification, setNotification] = useState(null);
     const [showInputModal, setShowInputModal] = useState(false);
@@ -147,10 +145,7 @@ function App() {
         }
     }, [chatHistory, aiReply, aiPhase]);
 
-    const buildStaticCache = (scriptsData, templatesData, chatKB, annKB, venueData) => {
-        const safeScripts = Array.isArray(scriptsData) ? scriptsData : [];
-        const chatScriptLib = safeScripts.map(s => `[${s.keywords || '通用'}]: ${s.content}`).join("\n");
-        setChatStaticContext(`${chatBase}\n\n### 知识库 (Knowledge Base)\n${chatKB || "暂无训练规则"}\n\n### 话术库 (Script Library)\n${chatScriptLib}`);
+    const buildStaticCache = (templatesData, annKB) => {
         const annTemplateLib = JSON.stringify(templatesData || []);
         setAnnStaticContext(`${annBase}\n\n### 知识库/规则 (AI Knowledge Base)\n${annKB || "暂无训练规则"}\n\n### 模板库 (Template Library)\n${annTemplateLib}`);
     };
@@ -202,11 +197,9 @@ function App() {
             if (data.customVars && data.customVars.length > 0) { setTemplateVars([...INITIAL_VARS, ...data.customVars]); }
 
             let cBase = data.settings?.chat_base || '';
-            let cKnow = data.settings?.chat_knowledge || "";
             let bRules = data.settings?.business_rules || '';
 
             setChatBase(cBase);
-            setChatKnowledge(cKnow);
             setBusinessRules(bRules);
 
             let aBase = data.settings?.ann_base || '';
@@ -214,7 +207,7 @@ function App() {
             setAnnBase(aBase);
             setAnnKnowledge(aKnow);
 
-            buildStaticCache(data.scripts || [], data.templates || [], cKnow, aKnow, data.venueRules || []);
+            buildStaticCache(data.templates || [], aKnow);
 
             if (user === 'aratakito') {
                 fetchAccounts();
@@ -253,7 +246,7 @@ function App() {
             return prev.map(t => t.orderId === ticketObj.orderId ? ticketObj : t);
         });
         setShowTrackerModal(true);
-        if (!isSettled) { 
+        if (status === 'pending') {
             setTrackerMsg(`✅ 注单 ${rawItem.orderNo} 已加入监控台`);
             setTimeout(() => setTrackerMsg(''), 5000);
         }
@@ -529,7 +522,7 @@ function App() {
         return 'OTHER';
     }, []);
 
-    const handleCallAI = async () => { 
+    const handleCallAI = async (modeOverride = chatPromptMode) => {
         updateActivity(); 
         if (!customerInput.trim() && pastedImages.length === 0) return; 
         
@@ -571,6 +564,45 @@ function App() {
         };
 
         try {
+           const currentMode = modeOverride || 'strict';
+           if (currentMode === 'free') {
+               setAiPhase('execution');
+               const historyToSend = currentFullHistory.slice(0, -1).map(msg => {
+                   let txt = msg.displayContent;
+                   if (!txt && typeof msg.content === 'string') txt = msg.content;
+                   return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: txt || " " };
+               });
+
+               const finalContent = [];
+               currentImages.forEach(img => { finalContent.push({ inlineData: { mimeType: img.mimeType, data: img.data } }); });
+               finalContent.push({ text: currentUserMsg });
+
+               const res = await callGeminiStream([
+                   ...historyToSend,
+                   { role: 'user', content: finalContent }
+               ], 0.45, (_chunk, fullText) => {
+                   setAiReply(fullText);
+                   if (fullText.trim()) updateAssistantMessage(fullText, null);
+               }, MODE_FAST);
+
+               if (res.error) {
+                   const errMsg = "AI Error: " + res.error;
+                   setAiReply(errMsg);
+                   finalizeAssistantMessage(errMsg, null);
+               } else if (res.success && res.data) {
+                   finalizeAssistantMessage(res.data, null);
+               } else {
+                   const fallbackMsg = 'AI 请求已结束，但没有得到明确结果。请稍后重试，或查看 Vercel 日志确认是否发生函数超时。';
+                   setAiReply(fallbackMsg);
+                   finalizeAssistantMessage(fallbackMsg, null);
+               }
+               if (res.usage) setLastUsage(res.usage);
+               if (res.cacheAction) setLastCacheMeta({ action: res.cacheAction, model: res.cacheModel, thinkingLevel: res.thinkingLevel });
+               setAiPhase('');
+               setAiLoading(false);
+               return;
+           }
+
            const directVenueMatch = findDirectVenueMatch(currentUserMsg);
            const likelyOrderId = extractLikelyOrderId(currentUserMsg);
            const runTriage = currentImages.length === 0 && shouldRunTriage(currentUserMsg, directVenueMatch, likelyOrderId);
@@ -656,7 +688,7 @@ function App() {
            - 客观注单数据（如有）：${betContext || '无'}
            - 赛事异常公告（如有）：${noticeContext || '无'}
 
-           *注意：请结合你的【核心人设】和【处理紧急问题规则】，自行判断如何回复。不要暴露你的思考过程，直接给出回复。如果注单未结算，在结尾加入 <<<ACTION_TRACK>>> 触发监控。涉及场馆规则、盘口规则、赔率计算、结算细则的问题，必须严格依据 System Prompt 中《场馆规则库》里的对应条款回答，不得编造或脑补。*
+           *注意：请结合用户原始输入、客观注单数据、公告和 RAG 命中内容回复。不要暴露你的思考过程，直接给出可复制到群里的回复。如果注单未结算，在结尾加入 <<<ACTION_TRACK>>> 触发监控。涉及场馆规则、盘口规则、赔率计算、结算细则的问题，必须优先依据命中的知识条款；没有命中可靠条款时，不要编造，改为要求补充注单号、场馆、玩法、截图或转人工核实。*
            `;
 
            let ragContext = { domain: 'general_policy', retrievalMode: 'none', results: [], prompt: '无' };
@@ -687,12 +719,10 @@ function App() {
 
            setAiPhase('execution');
 
-           const staticSystemPrompt = `
-           ${chatBase}
-
-           ### 业务硬性逻辑 (Business Rules)
-           ${businessRules}
-           `;
+           const staticSystemPrompt = [
+               chatBase,
+               businessRules,
+           ].filter(Boolean).join('\n\n');
 
            const executionUserPrompt = `
            ${redLinesContext}
@@ -733,7 +763,7 @@ function App() {
                    }
                }
 
-               const cleanText = fullText.replace("<<<ACTION_TRACK>>>", "");
+               const cleanText = fullText.replace(/<<<ACTION_TRACK>>>/g, "");
                setAiReply(cleanText); 
                if (cleanText.trim()) {
                    updateAssistantMessage(cleanText, runTriage ? triageResult : null);
@@ -772,15 +802,14 @@ function App() {
         setIsSmartOptimizing(true);
         
         let targetInstruction = "";
-        if (smartOptTarget === 'base') targetInstruction = "【强制指令】：你只能修改【System Prompt (基础人设)】。保持业务逻辑和知识库完全不变。";
-        else if (smartOptTarget === 'rules') targetInstruction = "【强制指令】：你只能修改【业务硬性逻辑】。保持人设和知识库完全不变。";
-        else if (smartOptTarget === 'knowledge') targetInstruction = "【强制指令】：你只能修改【智能知识库】。保持人设和业务逻辑完全不变。";
-        else targetInstruction = "【指令】：请根据管理员的描述，自动判断应该修改人设、逻辑还是知识库。";
+        if (smartOptTarget === 'base') targetInstruction = "【强制指令】：你只能修改【System Prompt (基础人设)】。保持业务逻辑完全不变。";
+        else if (smartOptTarget === 'rules') targetInstruction = "【强制指令】：你只能修改【业务硬性逻辑】。保持人设完全不变。";
+        else targetInstruction = "【指令】：请根据管理员的描述，自动判断应该修改人设还是业务逻辑。";
 
         const targetMsgContent = activeMsgIndex >= 0 && chatHistory[activeMsgIndex] ? (chatHistory[activeMsgIndex].displayContent || chatHistory[activeMsgIndex].content) : aiReply;
         const lastInteraction = `【AI曾做出的回复】: ${targetMsgContent}\n【您的修改建议】: ${smartOptReason}`;
         
-        const metaPrompt = `你是一个高级AI指令架构师。请根据管理员的【修改建议】，优化后台配置。\n${targetInstruction}\n【当前配置快照】:\n1. System Prompt:\n${chatBase}\n2. 业务硬性逻辑:\n${businessRules}\n3. 智能知识库:\n${chatKnowledge}\n【交互上下文】:\n${lastInteraction}\n【输出格式 (JSON Only)】:\n{ "updatedChatBase": "...", "updatedBusinessRules": "...", "updatedKnowledge": "..." }`;
+        const metaPrompt = `你是一个高级AI指令架构师。请根据管理员的【修改建议】，优化后台配置。\n${targetInstruction}\n【当前配置快照】:\n1. System Prompt:\n${chatBase}\n2. 业务硬性逻辑:\n${businessRules}\n【交互上下文】:\n${lastInteraction}\n【输出格式 (JSON Only)】:\n{ "updatedChatBase": "...", "updatedBusinessRules": "..." }`;
         const messages = [ { role: 'system', content: 'You are an expert prompt engineer. Output JSON only.' }, { role: 'user', content: metaPrompt } ];
 
         try {
@@ -788,13 +817,11 @@ function App() {
             if (res.success && res.data) {
                 const newChatBase = res.data.updatedChatBase || chatBase;
                 const newRules = res.data.updatedBusinessRules || businessRules;
-                const newKnowledge = res.data.updatedKnowledge || chatKnowledge; 
                 
                 setChatBase(newChatBase);
                 setBusinessRules(newRules);
-                setChatKnowledge(newKnowledge);
                 
-                await window.fbOps.saveCloudPrompts({ chat_base: newChatBase, business_rules: newRules, chat_knowledge: newKnowledge });
+                await window.fbOps.saveCloudPrompts({ chat_base: newChatBase, business_rules: newRules });
                 
                 setShowSmartOptModal(false);
                 setSmartOptReason('');
@@ -804,20 +831,6 @@ function App() {
             } else { throw new Error("AI 生成格式异常，未应用。"); }
         } catch(e) { setNotification({title: '进化失败', message: e.message, type: 'error'}); }
         setIsSmartOptimizing(false);
-    };
-
-    const handleTrainChat = async () => {
-        setIsChatTrainingLoading(true);
-        try {
-            const logs = await window.fbOps.getTrainingDataAll(); const relevantLogs = logs.filter(l => (l.type === 'bad' && l.correction) || l.type === 'good'); 
-            if (relevantLogs.length === 0) { setNotification({title: '提示', message: '未发现有效的训练记录，无法优化。', type: 'error'}); return; }
-            const feedbackContent = relevantLogs.map((c, i) => { if (c.type === 'good') return `[案例 ${i+1} - 正面反馈] Q: ${c.question}\nAI回答: ${c.answer}`; return `[案例 ${i+1} - 负面修正] Q: ${c.question}\nAI错误回答: ${c.answer}\n人工修正: ${c.correction}`; }).join("\n---\n");
-            const metaMessages = [ { role: "system", content: "你是一位高级知识工程师和逻辑侦探。" }, { role: "user", content: `请分析以下训练日志，重写【AI知识库】。\n\n【基础设定】:\n${chatBase}\n\n【训练日志】:\n${feedbackContent}\n\n请直接输出最终的知识库内容。`} ];
-            let newKnowledge = ''; const onChunk = (chunk, fullText) => { newKnowledge = fullText; setChatKnowledge(fullText); };
-            const res = await callGeminiStream(metaMessages, 1.0, onChunk, MODE_THINK);
-            
-            if (res.success) { await window.fbOps.saveCloudPrompts({ chat_base: chatBase, chat_knowledge: newKnowledge || chatKnowledge, business_rules: businessRules }); setNotification({title: '训练完成', message: '客服知识库已更新', type: 'success'}); }
-        } catch (e) { setNotification({title: '训练失败', message: e.message, type: 'error'}); } finally { setIsChatTrainingLoading(false); }
     };
 
     const handleTrainAnnouncement = async () => {
@@ -838,7 +851,7 @@ function App() {
         if (!saveConfirmType) return;
         try {
             let newData = {}; let typeName = "";
-            if (saveConfirmType === 'chat') { newData = { chat_base: chatBase, chat_knowledge: chatKnowledge, business_rules: businessRules }; typeName = "客服"; } 
+            if (saveConfirmType === 'chat') { newData = { chat_base: chatBase, business_rules: businessRules }; typeName = "客服"; }
             else if (saveConfirmType === 'ann') { newData = { ann_base: annBase, ann_knowledge: annKnowledge }; typeName = "公告"; }
             await window.fbOps.saveCloudPrompts(newData);
             setNotification({ title: "保存成功", message: `${typeName}AI设定已更新到云端。`, type: "success" }); await loadData();
@@ -936,12 +949,12 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
     const handleAnnFeedback = async (type) => { updateActivity(); if (type === 'bad' && !annCorrectReason.trim()) return setNotification({title: '提示', message: '请填写原因', type: 'error'}); setAnnSubmitStatus('sending'); try { await window.fbOps.saveAnnFeedback({ raw: rawNotice, ...genResult, type, reason: type==='good'?'Keep':annCorrectReason }); setAnnSubmitStatus(type === 'good' ? 'success_good' : 'success_bad'); if(type === 'bad') setAnnCorrectReason(''); setTimeout(() => setAnnSubmitStatus('idle'), 3000); } catch (e) { setNotification({title: '反馈失败', message: e.message, type: 'error'}); setAnnSubmitStatus('idle'); } };
     
     const fetchTemplates = async () => { setTemplateLoading(true); try { const templates = await window.fbOps.getTemplates(); setAllTemplates(templates); await loadData(); } catch (e) {} setTemplateLoading(false); };
-    const handleSaveTemplate = async () => { if (!templateForm.type || !templateForm.front) return setNotification({title: '提示', message: '请填写前台公告模板', type: 'error'}); setTemplateSaveStatus('saving'); try { const updatedTemplates = await window.fbOps.saveTemplate(templateForm); setAllTemplates(updatedTemplates); await buildStaticCache(scripts, updatedTemplates); setTemplateSaveStatus('success'); setTimeout(() => setTemplateSaveStatus('idle'), 2000); } catch (e) { setNotification({title: '保存失败', message: e.message, type: 'error'}); setTemplateSaveStatus('idle'); } };
+    const handleSaveTemplate = async () => { if (!templateForm.type || !templateForm.front) return setNotification({title: '提示', message: '请填写前台公告模板', type: 'error'}); setTemplateSaveStatus('saving'); try { const updatedTemplates = await window.fbOps.saveTemplate(templateForm); setAllTemplates(updatedTemplates); await buildStaticCache(updatedTemplates, annKnowledge); setTemplateSaveStatus('success'); setTimeout(() => setTemplateSaveStatus('idle'), 2000); } catch (e) { setNotification({title: '保存失败', message: e.message, type: 'error'}); setTemplateSaveStatus('idle'); } };
     const handleDeleteTemplate = async (id) => { if (userRole !== 'admin') { setShowPermissionModal(true); return; } setPendingDelete({ type: 'template', id }); setShowDeleteModal(true); };
     const startEdit = (s) => { updateActivity(); setScriptForm(s); setShowScriptModal(true); };
     const openAddScript = () => { updateActivity(); setScriptForm({ id: 'new_', category: '', keywords: '', content: '' }); setShowScriptModal(true); };
     const cancelEdit = () => { setShowScriptModal(false); setScriptForm({ id: '', category: '', keywords: '', content: '' }); };
-    const executeDelete = async () => { if (!pendingDelete) return; const { type, id, item } = pendingDelete; setLoading(true); try { if (type === 'template') { const updatedTemplates = await window.fbOps.deleteTemplate(id); setAllTemplates(updatedTemplates); await buildStaticCache(scripts, updatedTemplates); if (templateForm.id === id) { setTemplateForm({ id: null, type: '', front: '', inner: '', mail: '' }); setViewTemplate(null); setIsEditingTemplate(false); } } else if (type === 'script') { await window.fbOps.deleteScript(item.id); setScripts(await window.fbOps.getScripts()); await loadData(); } else if (type === 'image') { await window.fbOps.deleteImage(item.id); setImages(await window.fbOps.getImages()); } else if (type === 'chat_log') { setChatLogs(await window.fbOps.deleteTrainingData(id)); } else if (type === 'ann_log') { setAnnLogs(await window.fbOps.deleteAnnLog(id)); } setNotification({ title: "删除成功", message: "已永久删除。", type: "success" }); } catch(e) { setNotification({title: '删除失败', message: '操作未能完成', type: 'error'}); } setLoading(false); setShowDeleteModal(false); setPendingDelete(null); };
+    const executeDelete = async () => { if (!pendingDelete) return; const { type, id, item } = pendingDelete; setLoading(true); try { if (type === 'template') { const updatedTemplates = await window.fbOps.deleteTemplate(id); setAllTemplates(updatedTemplates); await buildStaticCache(updatedTemplates, annKnowledge); if (templateForm.id === id) { setTemplateForm({ id: null, type: '', front: '', inner: '', mail: '' }); setViewTemplate(null); setIsEditingTemplate(false); } } else if (type === 'script') { await window.fbOps.deleteScript(item.id); setScripts(await window.fbOps.getScripts()); await loadData(); } else if (type === 'image') { await window.fbOps.deleteImage(item.id); setImages(await window.fbOps.getImages()); } else if (type === 'chat_log') { setChatLogs(await window.fbOps.deleteTrainingData(id)); } else if (type === 'ann_log') { setAnnLogs(await window.fbOps.deleteAnnLog(id)); } setNotification({ title: "删除成功", message: "已永久删除。", type: "success" }); } catch(e) { setNotification({title: '删除失败', message: '操作未能完成', type: 'error'}); } setLoading(false); setShowDeleteModal(false); setPendingDelete(null); };
 
     const handleSaveAccount = async () => {
         if (!accountForm.username) return setNotification({title: '提示', message: '请填写用户名', type: 'error'});
@@ -1006,7 +1019,7 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
                 setActiveVenueId(null);
                 setVenueDraft({ name: '', rules: '', imageCount: 0 });
             }
-            buildStaticCache(scripts, allTemplates, chatKnowledge, annKnowledge, updated || []);
+            buildStaticCache(allTemplates, annKnowledge);
         } catch(err) {
             setNotification({ title: '删除失败', message: err.message, type: 'error' });
         }
@@ -1238,7 +1251,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                 imageCount: venueDraft.imageCount || 0
             });
             setVenueRules(updated || []);
-            buildStaticCache(scripts, allTemplates, chatKnowledge, annKnowledge, updated || []);
+            buildStaticCache(allTemplates, annKnowledge);
             setVenueSaveStatus('success');
             setTimeout(() => setVenueSaveStatus('idle'), 1600);
         } catch (err) {
@@ -1321,12 +1334,11 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                   <div>
                   <div className="mb-4">
                       <label className="block text-xs font-bold text-slate-700 mb-2">您希望 AI 修改哪里？</label>
-                      <div className="grid grid-cols-4 gap-2">
+	                      <div className="grid grid-cols-3 gap-2">
                           {[
                               { id: 'auto', label: '🤖 自动判断', icon: PATHS.Sparkles },
                               { id: 'rules', label: '⚖️ 业务逻辑', icon: PATHS.Shield },
                               { id: 'base', label: '🎭 基础人设', icon: PATHS.User },
-                              { id: 'knowledge', label: '🧠 知识库', icon: PATHS.Brain },
                           ].map(opt => (
                               <button
                                   key={opt.id}
@@ -2036,14 +2048,18 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                   </div>
 
                   <div className="bg-white rounded-xl shadow-sm border border-zinc-200 shrink-0 overflow-hidden focus-within:ring-2 ring-blue-100 flex flex-col md:h-auto transition-all">
-                      <div className="px-3 py-2 border-b border-slate-50 bg-zinc-50/50 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                              <Icon d={PATHS.Bot} className="text-slate-400 w-4 h-4"/>
-                              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">双智能体输入区 (支持多模态粘贴)</span>
-                          </div>
-                          {chatHistory.length > 0 && (
-                              <button onClick={handleClearChat} className="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-1 rounded hover:bg-slate-300 transition flex items-center gap-1">
-                                  <Icon d={PATHS.Trash} className="w-3 h-3"/> 新话题 (清空历史)
+	                      <div className="px-3 py-2 border-b border-slate-50 bg-zinc-50/50 flex items-center justify-between">
+	                          <div className="flex items-center gap-2">
+	                              <Icon d={PATHS.Bot} className="text-slate-400 w-4 h-4"/>
+	                              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">双智能体输入区 (支持多模态粘贴)</span>
+	                              <div className="hidden md:flex items-center rounded-lg border border-slate-200 bg-white p-0.5 ml-2">
+	                                  <button type="button" onClick={() => setChatPromptMode('strict')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition ${chatPromptMode === 'strict' ? 'bg-zinc-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>质检</button>
+	                                  <button type="button" onClick={() => setChatPromptMode('free')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition ${chatPromptMode === 'free' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>自由</button>
+	                              </div>
+	                          </div>
+	                          {chatHistory.length > 0 && (
+	                              <button onClick={handleClearChat} className="text-[10px] bg-slate-200 text-slate-600 font-bold px-2 py-1 rounded hover:bg-slate-300 transition flex items-center gap-1">
+	                                  <Icon d={PATHS.Trash} className="w-3 h-3"/> 新话题 (清空历史)
                               </button>
                           )}
                       </div>
@@ -2070,11 +2086,15 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                           placeholder="在此粘贴会员消息、注单截图或直接提问 (支持图文)..."
                       ></textarea>
                       
-                      <div className="px-3 py-2 border-t border-slate-50 flex justify-end bg-white">
-                          <button onClick={handleCallAI} disabled={aiLoading} className="bg-zinc-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-zinc-900 disabled:opacity-50 transition-all transform active:scale-95 flex items-center gap-2 touch-target w-full md:w-auto justify-center" title="快捷键: Ctrl + Enter">
-                              {aiLoading ? '分析中...' : <><Icon d={PATHS.Bot} className="w-4 h-4"/> 发送 <span className="text-[10px] opacity-80 font-normal ml-1">(Ctrl+Enter)</span></>}
-                          </button>
-                      </div>
+	                      <div className="px-3 py-2 border-t border-slate-50 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white">
+	                          <div className="flex md:hidden items-center rounded-lg border border-slate-200 bg-white p-0.5">
+	                              <button type="button" onClick={() => setChatPromptMode('strict')} className={`flex-1 px-2 py-1.5 rounded-md text-xs font-bold transition ${chatPromptMode === 'strict' ? 'bg-zinc-800 text-white shadow-sm' : 'text-slate-500'}`}>质检模式</button>
+	                              <button type="button" onClick={() => setChatPromptMode('free')} className={`flex-1 px-2 py-1.5 rounded-md text-xs font-bold transition ${chatPromptMode === 'free' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500'}`}>自由模式</button>
+	                          </div>
+	                          <button onClick={() => handleCallAI()} disabled={aiLoading} className="bg-zinc-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-zinc-900 disabled:opacity-50 transition-all transform active:scale-95 flex items-center gap-2 touch-target w-full md:w-auto justify-center" title="快捷键: Ctrl + Enter">
+	                              {aiLoading ? '分析中...' : <><Icon d={PATHS.Bot} className="w-4 h-4"/> {chatPromptMode === 'free' ? '自由发送' : '质检发送'} <span className="text-[10px] opacity-80 font-normal ml-1">(Ctrl+Enter)</span></>}
+	                          </button>
+	                      </div>
                   </div>
 
                   {/* 恢复原位的话术面板覆盖层 */}
@@ -2196,15 +2216,10 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                       <div className="p-3 border-t"><button onClick={() => handleSaveCloudPrompts('ann')} disabled={isAnnTrainingLoading} className="w-full bg-zinc-800 text-white py-2 rounded font-medium text-xs hover:bg-zinc-900 disabled:opacity-50 flex items-center justify-center gap-2"><Icon d={PATHS.Save} className="w-4 h-4"/> 保存公告设定到云端</button></div>
                   </div>
                   <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 flex flex-col overflow-hidden">
-                      <div className="p-3 border-b bg-zinc-50 font-bold text-blue-700 text-xs flex justify-between items-center"><span className="flex items-center gap-2"><Icon d={PATHS.Chat}/> 客服回复 AI 设定</span></div>
-                      <div className="flex-1 flex flex-col p-3 overflow-y-auto gap-3">
-                           <div><div className="prompt-label">基础人设 (Base Persona - Fixed)</div><textarea className="prompt-editor" style={{minHeight: '200px'}} value={chatBase} onChange={e => setChatBase(e.target.value)} placeholder="输入客服专家的基础设定..."></textarea></div>
-                           <div>
-                              <div className="prompt-label"><span>智能知识库 (Learned Rules - Dynamic)</span> <button onClick={handleTrainChat} disabled={isChatTrainingLoading} className="text-zinc-700 text-[10px] hover:underline flex items-center gap-1">{isChatTrainingLoading ? 'AI思考中...' : '🔄 提取训练'}</button></div>
-                              <textarea className={`prompt-editor ${isChatTrainingLoading ? 'loading' : ''}`} style={{minHeight: '120px'}} value={chatKnowledge} onChange={e => setChatKnowledge(e.target.value)} placeholder="点击上方“提取训练”按钮，AI将自动从纠错记录中总结规则..." readOnly={isChatTrainingLoading}></textarea>
-                           </div>
-                           
-                           <div className="flex-1 flex flex-col mt-3 pt-3 border-t border-zinc-100">
+	                      <div className="p-3 border-b bg-zinc-50 font-bold text-blue-700 text-xs flex justify-between items-center"><span className="flex items-center gap-2"><Icon d={PATHS.Chat}/> 客服回复 AI 设定</span></div>
+	                      <div className="flex-1 flex flex-col p-3 overflow-y-auto gap-3">
+	                           <div><div className="prompt-label">基础人设 (Base Persona - Fixed)</div><textarea className="prompt-editor" style={{minHeight: '200px'}} value={chatBase} onChange={e => setChatBase(e.target.value)} placeholder="输入客服专家的基础设定..."></textarea></div>
+	                           <div className="flex-1 flex flex-col mt-3 pt-3 border-t border-zinc-100">
                               <div className="prompt-label text-red-600">
                                   <span>⚖️ 业务硬性逻辑 (Business Hard Rules)</span> 
                                   <span className="text-[10px] font-normal ml-2 text-slate-400">含公告模板、计算公式、风控底线</span>
@@ -2218,7 +2233,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                               ></textarea>
                            </div>
                       </div>
-                      <div className="p-3 border-t"><button onClick={() => handleSaveCloudPrompts('chat')} disabled={isChatTrainingLoading} className="w-full bg-zinc-800 text-white py-2 rounded font-bold text-xs hover:bg-zinc-900 disabled:opacity-50 flex items-center justify-center gap-2"><Icon d={PATHS.Save} className="w-4 h-4"/> 保存客服设定到云端</button></div>
+	                      <div className="p-3 border-t"><button onClick={() => handleSaveCloudPrompts('chat')} className="w-full bg-zinc-800 text-white py-2 rounded font-bold text-xs hover:bg-zinc-900 disabled:opacity-50 flex items-center justify-center gap-2"><Icon d={PATHS.Save} className="w-4 h-4"/> 保存客服设定到云端</button></div>
                   </div>
               </div>
             </div>

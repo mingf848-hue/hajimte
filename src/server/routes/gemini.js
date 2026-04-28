@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { env } from '../lib/env.js';
+import { cleanupGeminiCaches } from '../services/geminiCacheService.js';
 import { proxyGeminiRequest } from '../services/geminiProxyService.js';
 
 export function createGeminiRouter() {
@@ -15,6 +16,15 @@ export function createGeminiRouter() {
   router.post('/gemini', limiter, async (req, res, next) => {
     try {
       await proxyGeminiRequest(req, res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/cleanup-caches', async (_req, res, next) => {
+    try {
+      const result = await cleanupGeminiCaches();
+      res.json({ success: true, ...result });
     } catch (error) {
       next(error);
     }

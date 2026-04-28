@@ -372,6 +372,26 @@ export async function retrieveKnowledgeContext({ query, coreIntent = '', venue =
     });
   }
 
+  if (textResults.length === 0 && vectorResults.length === 0 && (domainHint || venue)) {
+    try {
+      textResults = await runAtlasTextSearch(collection, {
+        query,
+        domain: '',
+        venue: '',
+        limit: env.RAG_TEXT_RESULT_LIMIT,
+      });
+      retrievalMode = 'text_broadened';
+    } catch {
+      textResults = await runFallbackSearch(collection, {
+        query,
+        domain: '',
+        venue: '',
+        limit: env.RAG_TEXT_RESULT_LIMIT,
+      });
+      retrievalMode = 'fallback_broadened';
+    }
+  }
+
   const results = mergeHybridResults(textResults, vectorResults, limit);
   return {
     domain: domainHint,
@@ -500,7 +520,6 @@ export function buildKnowledgeUnitsForDocument(sourceCollection, doc) {
   if (sourceCollection === 'global_settings' && doc._id === 'ai_prompts') {
     const settingsSections = [
       ['business_rules', doc.business_rules, 'general_policy'],
-      ['chat_knowledge', doc.chat_knowledge, 'general_policy'],
       ['ann_knowledge', doc.ann_knowledge, 'general_policy'],
     ];
     return settingsSections.flatMap(([name, text, domain]) => (

@@ -554,7 +554,7 @@ export async function syncKnowledgeUnitsForDocument(sourceCollection, doc) {
   }
 
   let units = buildKnowledgeUnitsForDocument(sourceCollection, { ...doc, _id: sourceId });
-  if (units.length === 0) return { deleted: true, inserted: 0 };
+  if (units.length === 0) return { success: true, deleted: true, inserted: 0 };
 
   units = await createEmbeddingsForUnits(units);
   await collection.bulkWrite(units.map((unit) => ({
@@ -565,7 +565,7 @@ export async function syncKnowledgeUnitsForDocument(sourceCollection, doc) {
     },
   })), { ordered: false });
 
-  return { deleted: true, inserted: units.length };
+  return { success: true, deleted: true, inserted: units.length };
 }
 
 export async function deleteKnowledgeUnitsForDocument(sourceCollection, sourceId) {

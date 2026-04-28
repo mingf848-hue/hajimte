@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { AppError } from '../lib/errors.js';
+import { logger } from '../lib/logger.js';
 import { assertCollectionAllowed, getCollectionModel } from '../services/db.js';
 import { deleteImageObject } from '../services/storage.js';
 import {
@@ -102,17 +103,34 @@ export function createDbRouter() {
       let id = data.id || data._id;
       delete data.id;
       delete data._id;
+      let ragSync = { skipped: true };
 
       if (id && !String(id).startsWith('new_')) {
         const doc = await Model.findByIdAndUpdate(id, { $set: data }, { upsert: true, new: true }).lean();
-        await syncKnowledgeUnitsForDocument(req.params.collection, doc).catch(() => {});
+        try {
+          ragSync = await syncKnowledgeUnitsForDocument(req.params.collection, doc);
+        } catch (error) {
+          ragSync = {
+            success: false,
+            error: error?.message || 'RAG sync failed',
+          };
+          logger.warn({ error, collection: req.params.collection, id }, 'RAG sync failed');
+        }
       } else {
         id = new mongoose.Types.ObjectId().toString();
         const doc = await Model.create({ _id: id, ...data });
-        await syncKnowledgeUnitsForDocument(req.params.collection, doc.toObject()).catch(() => {});
+        try {
+          ragSync = await syncKnowledgeUnitsForDocument(req.params.collection, doc.toObject());
+        } catch (error) {
+          ragSync = {
+            success: false,
+            error: error?.message || 'RAG sync failed',
+          };
+          logger.warn({ error, collection: req.params.collection, id }, 'RAG sync failed');
+        }
       }
 
-      res.json({ success: true, id });
+      res.json({ success: true, id, ragSync });
     } catch (error) {
       next(error);
     }

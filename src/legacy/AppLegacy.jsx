@@ -859,7 +859,7 @@ function App() {
     };
     
     const handleSaveCloudPrompts = (type) => { setSaveConfirmType(type); };
-    const handleSaveScript = async () => { updateActivity(); if (!scriptForm.content) return setNotification({title: '提示', message: '内容不能为空', type: 'error'}); setSaveStatus('saving'); try { await window.fbOps.saveScript(scriptForm); const s = await window.fbOps.getScripts(); setScripts(s); setShowScriptModal(false); setSaveStatus('success'); setTimeout(() => setSaveStatus('idle'), 2000); await loadData(); } catch (e) { setNotification({title: '保存失败', message: e.message, type: 'error'}); setSaveStatus('idle'); } };
+    const handleSaveScript = async () => { updateActivity(); if (!scriptForm.content) return setNotification({title: '提示', message: '内容不能为空', type: 'error'}); setSaveStatus('saving'); try { const result = await window.fbOps.saveScript(scriptForm); setScripts(result?.scripts || []); setShowScriptModal(false); setSaveStatus('success'); setTimeout(() => setSaveStatus('idle'), 2000); await loadData(); if (result?.ragSync?.success === false) { setNotification({ title: '话术已保存，RAG未同步', message: result.ragSync.error || '请检查 Gemini Embedding、MongoDB 向量索引或服务日志。', type: 'error' }); } else { setNotification({ title: '保存成功', message: '话术已保存并同步到 RAG。', type: 'success' }); } } catch (e) { setNotification({title: '保存失败', message: e.message, type: 'error'}); setSaveStatus('idle'); } };
     const openAddImage = () => { updateActivity(); setImageForm({ file: null, preview: null, title: '', tags: '' }); setShowImageModal(true); };
     useEffect(() => {
         if (!showImageModal) return;

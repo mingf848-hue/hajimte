@@ -136,8 +136,9 @@ export const backendApi = {
     async saveScript(s) {
         const user = localStorage.getItem('hajimi_username') || 'Unknown';
         const payload = { category: s.category, keywords: s.keywords, content: s.content, time: new Date().toLocaleString(), id: s.id, user };
-        await apiCall('POST', '/api/db/scripts', payload);
-        return this.getScripts();
+        const result = await apiCall('POST', '/api/db/scripts', payload);
+        const scripts = await this.getScripts();
+        return { scripts, ragSync: result?.ragSync };
     },
     async deleteScript(id) {
         await apiCall('DELETE', `/api/db/scripts/${id}`);

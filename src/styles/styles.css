@@ -888,6 +888,16 @@ html, body {
   background: linear-gradient(135deg, #d1fae5, #a7f3d0);
   color: #065f46;
 }
+.var-chip.add.batch {
+  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  border-color: #fdba74;
+  color: #c2410c;
+}
+.var-chip.add.batch::before { background: #f97316; }
+.var-chip.add.batch:hover {
+  background: linear-gradient(135deg, #ffedd5, #fed7aa);
+  color: #9a3412;
+}
 .var-chip .delete-btn {
   margin-left: 4px;
   width: 16px; height: 16px;

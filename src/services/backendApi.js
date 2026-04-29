@@ -207,6 +207,19 @@ export const backendApi = {
             return [];
         }
     },
+    async addCustomVars(items) {
+        try {
+            const d = await apiCall('GET', '/api/db/global_settings/template_vars');
+            const vars = d ? d.vars || [] : [];
+            for (const item of items) {
+                if (item && !vars.includes(item)) vars.push(item);
+            }
+            await apiCall('POST', '/api/db/global_settings', { id: 'template_vars', vars });
+            return vars;
+        } catch {
+            return [];
+        }
+    },
     async deleteCustomVar(v) {
         try {
             const d = await apiCall('GET', '/api/db/global_settings/template_vars');

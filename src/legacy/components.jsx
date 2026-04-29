@@ -265,7 +265,7 @@ export function SaveConfirmModal({ type, onClose, onConfirm }) {
     );
 }
 
-export function GeneralInputModal({ title, placeholder, value, onChange, onConfirm, onCancel }) {
+export function GeneralInputModal({ title, placeholder, value, onChange, onConfirm, onCancel, multiline = false, helpText = '' }) {
     return (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 fade-in" onClick={onCancel}>
             <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm flex flex-col gap-4 transform transition-all scale-100" onClick={e => e.stopPropagation()}>
@@ -273,7 +273,21 @@ export function GeneralInputModal({ title, placeholder, value, onChange, onConfi
                     <h3 className="text-lg font-bold text-slate-800">{title}</h3>
                     <button onClick={onCancel} className="text-slate-400 hover:text-slate-600"><Icon d={PATHS.Close} className="w-5 h-5" /></button>
                 </div>
-                <input autoFocus value={value} onChange={e => onChange(e.target.value)} className="w-full border border-zinc-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-zinc-300 focus:border-transparent transition" placeholder={placeholder} onKeyDown={e => e.key === 'Enter' && onConfirm()} />
+                {multiline ? (
+                    <textarea
+                        autoFocus
+                        value={value}
+                        onChange={e => onChange(e.target.value)}
+                        className="w-full min-h-[180px] border border-zinc-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-zinc-300 focus:border-transparent transition resize-none text-sm"
+                        placeholder={placeholder}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onConfirm();
+                        }}
+                    />
+                ) : (
+                    <input autoFocus value={value} onChange={e => onChange(e.target.value)} className="w-full border border-zinc-200 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-zinc-300 focus:border-transparent transition" placeholder={placeholder} onKeyDown={e => e.key === 'Enter' && onConfirm()} />
+                )}
+                {helpText && <p className="text-xs text-slate-500 leading-relaxed -mt-2">{helpText}</p>}
                 <div className="flex gap-3 mt-2">
                     <button onClick={onCancel} className="flex-1 bg-zinc-100 text-zinc-600 py-2.5 rounded-lg font-bold text-sm hover:bg-zinc-200 transition">取消</button>
                     <button onClick={onConfirm} className="flex-1 bg-zinc-800 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-zinc-900 transition">确定</button>

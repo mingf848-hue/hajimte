@@ -108,6 +108,7 @@ function App() {
     const [notification, setNotification] = useState(null);
     const [showInputModal, setShowInputModal] = useState(false);
     const [inputValue, setInputValue] = useState('');
+    const [customVarMode, setCustomVarMode] = useState('single');
     const [showBackupConfirm, setShowBackupConfirm] = useState(false);
     const [lastDebugInfo, setLastDebugInfo] = useState(null);
     const [showDebugModal, setShowDebugModal] = useState(false);
@@ -351,8 +352,40 @@ function App() {
         }
     };
 
-    const openAddCustomVarModal = () => { setInputValue(''); setShowInputModal(true); };
-    const confirmAddCustomVar = async () => { if (inputValue.trim()) { const fullVar = `{{${inputValue.trim()}}}`; if (!templateVars.includes(fullVar)) { const newVars = [...templateVars, fullVar]; setTemplateVars(newVars); await window.fbOps.addCustomVar(fullVar); } insertTemplateVar(fullVar); } setShowInputModal(false); }
+    const normalizeCustomVar = (name) => {
+        const cleaned = (name || '').trim().replace(/^\{\{\s*/, '').replace(/\s*\}\}$/, '').trim();
+        return cleaned ? `{{${cleaned}}}` : '';
+    };
+    const parseBatchCustomVars = (text) => {
+        const parts = (text || '').split(/[\n,，、;\s]+/).map(normalizeCustomVar).filter(Boolean);
+        return [...new Set(parts)];
+    };
+    const openAddCustomVarModal = () => { setCustomVarMode('single'); setInputValue(''); setShowInputModal(true); };
+    const openBatchAddCustomVarModal = () => { setCustomVarMode('batch'); setInputValue(''); setShowInputModal(true); };
+    const confirmAddCustomVar = async () => {
+        if (!inputValue.trim()) { setShowInputModal(false); return; }
+        if (customVarMode === 'batch') {
+            const batchVars = parseBatchCustomVars(inputValue);
+            const newVars = batchVars.filter(v => !templateVars.includes(v));
+            if (newVars.length > 0) {
+                setTemplateVars([...templateVars, ...newVars]);
+                await window.fbOps.addCustomVars(newVars);
+            }
+            setNotification({ title: '变量已新增', message: `新增 ${newVars.length} 个，跳过 ${batchVars.length - newVars.length} 个重复变量。`, type: 'success' });
+            setShowInputModal(false);
+            return;
+        }
+        const fullVar = normalizeCustomVar(inputValue);
+        if (fullVar) {
+            if (!templateVars.includes(fullVar)) {
+                const newVars = [...templateVars, fullVar];
+                setTemplateVars(newVars);
+                await window.fbOps.addCustomVar(fullVar);
+            }
+            insertTemplateVar(fullVar);
+        }
+        setShowInputModal(false);
+    }
     const handleDeleteVar = async (e, v) => { e.stopPropagation(); if (INITIAL_VARS.includes(v)) { setNotification({ title: '提示', message: '系统默认变量不可删除', type: 'error' }); return; } if (confirm(`确定要删除变量 ${v} 吗？`)) { const newVars = await window.fbOps.deleteCustomVar(v); const combined = [...INITIAL_VARS, ...newVars]; setTemplateVars(combined); } };
     const extractVars = (text) => { if (!text) return []; const regex = /\{{1,2}\s*([\w\u4e00-\u9fa5]+)\s*\}{1,2}/g; const matches = text.match(regex); if (!matches) return []; return [...new Set(matches.map(m => m.replace(/[{}]/g, '').trim()))]; };
     const usedVariables = useMemo(() => { if (!isEditingTemplate && !templateForm.id) return []; const fullText = (templateForm.front || '') + (templateForm.mail || '') + (templateForm.inner || ''); return templateVars.filter(v => fullText.includes(v)); }, [templateForm, templateVars, isEditingTemplate]);
@@ -1416,7 +1449,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         )}
         {saveConfirmType && <SaveConfirmModal type={saveConfirmType} onClose={() => setSaveConfirmType(null)} onConfirm={executeSaveCloudPrompts} />}
         {notification && <NotificationModal {...notification} onClose={() => setNotification(null)} />}
-        {showInputModal && <GeneralInputModal title="此网页显示" placeholder="请输入新增变量名 (无需大括号):" value={inputValue} onChange={setInputValue} onConfirm={confirmAddCustomVar} onCancel={() => setShowInputModal(false)} />}
+        {showInputModal && <GeneralInputModal title={customVarMode === 'batch' ? '批量新增变量' : '此网页显示'} placeholder={customVarMode === 'batch' ? '一行一个变量，也可用逗号、顿号或空格分隔' : '请输入新增变量名 (无需大括号):'} value={inputValue} onChange={setInputValue} onConfirm={confirmAddCustomVar} onCancel={() => setShowInputModal(false)} multiline={customVarMode === 'batch'} helpText={customVarMode === 'batch' ? '可直接粘贴：米兰主推WEB、米兰主推H5。系统会自动补齐 {{ }} 并跳过重复变量。' : ''} />}
         {showBackupConfirm && <GeneralConfirmModal title="确认备份" message="确定要下载所有数据库数据(JSON)到本地吗？" onConfirm={confirmDownloadBackup} onCancel={() => setShowBackupConfirm(false)} type="info" confirmText="确认下载" />}
         {showDebugModal && lastDebugInfo && <DebugModal data={lastDebugInfo} onClose={() => setShowDebugModal(false)} />}
         {showTrackerModal && <TrackerModal isOpen={showTrackerModal} onClose={() => { setShowTrackerModal(false); setHasUnreadUpdates(false); }} tickets={trackedTickets} onDelete={handleDeleteTracked} isRefreshing={isTrackerRefreshing} trackerMsg={trackerMsg} />}
@@ -1962,6 +1995,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                                           </button>
                                       ))}
                                       <button onClick={openAddCustomVarModal} className="var-chip add" title="新增自定义变量"><Icon d={PATHS.Plus} className="w-3 h-3"/> 新增</button>
+                                      <button onClick={openBatchAddCustomVarModal} className="var-chip add batch" title="批量新增自定义变量"><Icon d={PATHS.Plus} className="w-3 h-3"/> 批量新增</button>
                                   </div>
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0">
                                       <div className="tpl-edit-wrap"><label className="tpl-field-label">前台公告 (Front)</label><div className="tpl-edit-wrap-inner front"><HighlightedTextarea inputRef={frontRef} value={templateForm.front} onFocus={() => setLastFocusedTemplateField('front')} onChange={e => setTemplateForm({...templateForm, front: e.target.value})} className="w-full h-full border-0 outline-none transition" placeholder="输入前台模板..."/></div></div>

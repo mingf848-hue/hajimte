@@ -197,6 +197,7 @@ export function DebugModal({ data, onClose }) {
 
 export function HighlightedTextarea({ value, onChange, placeholder, className, onFocus, inputRef }) {
     const backdropRef = useRef(null);
+    const [isFocused, setIsFocused] = useState(false);
     const handleScroll = (e) => {
         if (backdropRef.current) {
             backdropRef.current.scrollTop = e.target.scrollTop;
@@ -205,14 +206,41 @@ export function HighlightedTextarea({ value, onChange, placeholder, className, o
     };
     const getHighlightedText = (text) => {
         if (!text) return '';
-        let escaped = text.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+        let escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         return escaped.replace(/(\{\{.*?\}\})/g, '<span class="text-blue-600 font-bold bg-blue-50 rounded-sm">$1</span>');
     };
     const displayText = getHighlightedText(value) + (value.endsWith('\n') ? '<br> ' : '');
+    const editorStyle = {
+        lineHeight: '1.5',
+        fontFamily: 'Menlo, Monaco, Courier New, monospace',
+        overflowWrap: 'break-word',
+        wordBreak: 'break-word',
+    };
+
     return (
-        <div className={`relative group ${className} !bg-white !text-transparent`}>
-            <div ref={backdropRef} className="absolute inset-0 p-2 text-sm font-mono whitespace-pre-wrap break-words overflow-hidden text-slate-800 pointer-events-none" style={{ borderColor: 'transparent', lineHeight: '1.5' }} dangerouslySetInnerHTML={{ __html: displayText }} />
-            <textarea ref={inputRef} value={value} onChange={onChange} onScroll={handleScroll} onFocus={onFocus} placeholder={placeholder} className="absolute inset-0 w-full h-full p-2 text-sm font-mono bg-transparent outline-none resize-none border-none text-transparent caret-slate-800 focus:ring-0" style={{ color: 'transparent', caretColor: '#334155', lineHeight: '1.5', fontFamily: 'Menlo, Monaco, Courier New, monospace' }} />
+        <div className={`relative group ${className} !bg-white`}>
+            {!isFocused && (
+                <div
+                    ref={backdropRef}
+                    className="absolute inset-0 p-2 text-sm font-mono whitespace-pre-wrap break-words overflow-hidden text-slate-800 pointer-events-none"
+                    style={{ ...editorStyle, borderColor: 'transparent' }}
+                    dangerouslySetInnerHTML={{ __html: displayText }}
+                />
+            )}
+            <textarea
+                ref={inputRef}
+                value={value}
+                onChange={onChange}
+                onScroll={handleScroll}
+                onFocus={(e) => {
+                    setIsFocused(true);
+                    onFocus?.(e);
+                }}
+                onBlur={() => setIsFocused(false)}
+                placeholder={placeholder}
+                className={`absolute inset-0 w-full h-full p-2 text-sm font-mono bg-transparent outline-none resize-none border-none caret-slate-800 focus:ring-0 placeholder:text-slate-400 ${isFocused ? 'text-slate-800' : 'text-transparent'}`}
+                style={editorStyle}
+            />
         </div>
     );
 }

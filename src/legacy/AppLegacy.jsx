@@ -1698,7 +1698,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                                }
                            }} />
                        </div>
-                       <div><input value={imageForm.title} onChange={e => setImageForm({...imageForm, title: e.target.value})} className="w-full border rounded-xl px-3 py-2 text-sm outline-none" placeholder="图片标题 (可选)"/></div>
+                       <div><textarea value={imageForm.title} onChange={e => setImageForm({...imageForm, title: e.target.value})} className="w-full border rounded-xl px-3 py-2 text-sm outline-none resize-none" placeholder="图片标题 (可选，支持换行)" rows="2"/></div>
                        <div><input value={imageForm.tags} onChange={e => setImageForm({...imageForm, tags: e.target.value})} className="w-full border rounded-xl px-3 py-2 text-sm outline-none" placeholder="标签 (必填，以逗号分隔)"/></div>
                   </div>
                   <button onClick={handleUploadImage} disabled={uploading} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold mt-2">{uploading ? '上传中...' : '开始上传'}</button>
@@ -1716,7 +1716,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                )}
                <img src={`/api/images/${viewImage.id}`} className="max-w-full max-h-[70vh] object-contain shadow-2xl rounded-lg" onClick={(e) => e.stopPropagation()} />
                <div className="mt-4 bg-white/10 border border-white/10 backdrop-blur text-white px-6 py-3 rounded-2xl text-sm flex flex-col items-center gap-2 shadow-2xl" onClick={e => e.stopPropagation()}>
-                   <span className="font-bold text-blue-200 text-lg">{viewImage.title || '未命名图片'}</span>
+                   <span className="font-bold text-blue-200 text-lg whitespace-pre-wrap text-center">{viewImage.title || '未命名图片'}</span>
                    <div className="flex gap-2">
                        <button onClick={() => { handleCopyImage(viewImage); }} disabled={copyingImage} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
                            <Icon d={PATHS.Copy} className="w-3 h-3" /> {copyingImage ? '复制中...' : '复制图片'}
@@ -2212,7 +2212,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                         {filteredImages.map(img => (
                             <div key={img.id} onClick={() => setViewImage(img)} className="group bg-white rounded-xl border border-zinc-200 cursor-pointer shadow-sm active:scale-95 transition-all duration-200 relative overflow-hidden">
                                 <div className="aspect-video bg-slate-100 flex items-center justify-center relative overflow-hidden"><img src={`/api/images/${img.id}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); handleDelete('image', img); }} className="absolute top-1 right-1 bg-black/50 text-white p-1.5 rounded-full md:opacity-0 group-hover:opacity-100 transition backdrop-blur-sm"><Icon d={PATHS.Trash} className="w-4 h-4"/></button></div>
-                                <div className="p-2"><div className="font-bold text-xs truncate text-slate-700">{img.title}</div><div className="text-[10px] text-slate-400 truncate">{img.tags}</div></div>
+                                <div className="p-2"><div className="font-bold text-xs text-slate-700 whitespace-pre-wrap line-clamp-2">{img.title}</div><div className="text-[10px] text-slate-400 truncate">{img.tags}</div></div>
                             </div>
                         ))}
                     </div>

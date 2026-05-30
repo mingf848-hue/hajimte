@@ -1450,7 +1450,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         {saveConfirmType && <SaveConfirmModal type={saveConfirmType} onClose={() => setSaveConfirmType(null)} onConfirm={executeSaveCloudPrompts} />}
         {notification && <NotificationModal {...notification} onClose={() => setNotification(null)} />}
         {imageCopyToast && (
-            <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold shadow-xl border transition-all z-50 ${imageCopyToast.type === 'error' ? 'bg-red-500/90 text-white border-red-300/40' : 'bg-emerald-500/90 text-white border-emerald-300/40'}`}>
+            <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold shadow-xl border transition-all z-[100] ${imageCopyToast.type === 'error' ? 'bg-red-500/90 text-white border-red-300/40' : 'bg-emerald-500/90 text-white border-emerald-300/40'}`}>
                 {imageCopyToast.message}
             </div>
         )}

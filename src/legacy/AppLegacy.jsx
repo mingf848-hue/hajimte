@@ -934,7 +934,7 @@ function App() {
         window.addEventListener('paste', handlePaste);
         return () => window.removeEventListener('paste', handlePaste);
     }, [showImageModal]);
-const handleUploadImage = async () => { updateActivity(); if (!imageForm.file || !imageForm.tags) return setNotification({title: '提示', message: '请选择图片并填写标签', type: 'error'}); setUploading(true); try { await window.fbOps.uploadImage(imageForm.file, imageForm.title || 'img', imageForm.tags); const i = await window.fbOps.getImages(); setImages(i); setShowImageModal(false); } catch (e) { setNotification({title: '上传失败', message: e.message, type: 'error'}); } setUploading(false); };
+const handleUploadImage = async () => { updateActivity(); if (!imageForm.file || !imageForm.tags) return showImageCopyToast('请选择图片并填写标签', 'error'); setUploading(true); try { await window.fbOps.uploadImage(imageForm.file, imageForm.title || 'img', imageForm.tags); const i = await window.fbOps.getImages(); setImages(i); setShowImageModal(false); } catch (e) { showImageCopyToast(e.message || '上传失败', 'error'); } setUploading(false); };
     const handleDelete = async (type, item) => { updateActivity(); if (type === 'script' && userRole !== 'admin') { setShowPermissionModal(true); return; } setPendingDelete({ type, item }); setShowDeleteModal(true); };
     
     const handleLikeMsg = async (idx) => { 
@@ -1016,7 +1016,7 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
     const startEdit = (s) => { updateActivity(); setScriptForm(s); setShowScriptModal(true); };
     const openAddScript = () => { updateActivity(); setScriptForm({ id: 'new_', category: '', keywords: '', content: '' }); setShowScriptModal(true); };
     const cancelEdit = () => { setShowScriptModal(false); setScriptForm({ id: '', category: '', keywords: '', content: '' }); };
-    const executeDelete = async () => { if (!pendingDelete) return; const { type, id, item } = pendingDelete; setLoading(true); try { if (type === 'template') { const updatedTemplates = await window.fbOps.deleteTemplate(id); setAllTemplates(updatedTemplates); await buildStaticCache(updatedTemplates, annKnowledge); if (templateForm.id === id) { setTemplateForm({ id: null, type: '', front: '', inner: '', mail: '' }); setViewTemplate(null); setIsEditingTemplate(false); } } else if (type === 'script') { await window.fbOps.deleteScript(item.id); setScripts(await window.fbOps.getScripts()); await loadData(); } else if (type === 'image') { await window.fbOps.deleteImage(item.id); setImages(await window.fbOps.getImages()); } else if (type === 'chat_log') { setChatLogs(await window.fbOps.deleteTrainingData(id)); } else if (type === 'ann_log') { setAnnLogs(await window.fbOps.deleteAnnLog(id)); } setNotification({ title: "删除成功", message: "已永久删除。", type: "success" }); } catch(e) { setNotification({title: '删除失败', message: '操作未能完成', type: 'error'}); } setLoading(false); setShowDeleteModal(false); setPendingDelete(null); };
+    const executeDelete = async () => { if (!pendingDelete) return; const { type, id, item } = pendingDelete; setLoading(true); try { if (type === 'template') { const updatedTemplates = await window.fbOps.deleteTemplate(id); setAllTemplates(updatedTemplates); await buildStaticCache(updatedTemplates, annKnowledge); if (templateForm.id === id) { setTemplateForm({ id: null, type: '', front: '', inner: '', mail: '' }); setViewTemplate(null); setIsEditingTemplate(false); } } else if (type === 'script') { await window.fbOps.deleteScript(item.id); setScripts(await window.fbOps.getScripts()); await loadData(); } else if (type === 'image') { await window.fbOps.deleteImage(item.id); setImages(await window.fbOps.getImages()); } else if (type === 'chat_log') { setChatLogs(await window.fbOps.deleteTrainingData(id)); } else if (type === 'ann_log') { setAnnLogs(await window.fbOps.deleteAnnLog(id)); } if (type === 'image') { showImageCopyToast('图片已删除'); } else { setNotification({ title: "删除成功", message: "已永久删除。", type: "success" }); } } catch(e) { if (type === 'image') { showImageCopyToast('删除失败', 'error'); } else { setNotification({title: '删除失败', message: '操作未能完成', type: 'error'}); } } setLoading(false); setShowDeleteModal(false); setPendingDelete(null); };
 
     const handleSaveAccount = async () => {
         if (!accountForm.username) return setNotification({title: '提示', message: '请填写用户名', type: 'error'});
@@ -1449,6 +1449,11 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         )}
         {saveConfirmType && <SaveConfirmModal type={saveConfirmType} onClose={() => setSaveConfirmType(null)} onConfirm={executeSaveCloudPrompts} />}
         {notification && <NotificationModal {...notification} onClose={() => setNotification(null)} />}
+        {imageCopyToast && (
+            <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold shadow-xl border transition-all z-50 ${imageCopyToast.type === 'error' ? 'bg-red-500/90 text-white border-red-300/40' : 'bg-emerald-500/90 text-white border-emerald-300/40'}`}>
+                {imageCopyToast.message}
+            </div>
+        )}
         {showInputModal && <GeneralInputModal title={customVarMode === 'batch' ? '批量新增变量' : '此网页显示'} placeholder={customVarMode === 'batch' ? '一行一个变量，也可用逗号、顿号或空格分隔' : '请输入新增变量名 (无需大括号):'} value={inputValue} onChange={setInputValue} onConfirm={confirmAddCustomVar} onCancel={() => setShowInputModal(false)} multiline={customVarMode === 'batch'} helpText={customVarMode === 'batch' ? '可直接粘贴：米兰主推WEB、米兰主推H5。系统会自动补齐 {{ }} 并跳过重复变量。' : ''} />}
         {showBackupConfirm && <GeneralConfirmModal title="确认备份" message="确定要下载所有数据库数据(JSON)到本地吗？" onConfirm={confirmDownloadBackup} onCancel={() => setShowBackupConfirm(false)} type="info" confirmText="确认下载" />}
         {showDebugModal && lastDebugInfo && <DebugModal data={lastDebugInfo} onClose={() => setShowDebugModal(false)} />}
@@ -1709,11 +1714,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         {/* 图片预览及复制快捷按钮模态框 */}
         {viewImage && (
            <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 fade-in" onClick={() => setViewImage(null)}>
-               {imageCopyToast && (
-                   <div className={`absolute top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold shadow-xl border transition-all ${imageCopyToast.type === 'error' ? 'bg-red-500/90 text-white border-red-300/40' : 'bg-emerald-500/90 text-white border-emerald-300/40'}`} onClick={e => e.stopPropagation()}>
-                       {imageCopyToast.message}
-                   </div>
-               )}
+    
                <img src={`/api/images/${viewImage.id}`} className="max-w-full max-h-[70vh] object-contain shadow-2xl rounded-lg" onClick={(e) => e.stopPropagation()} />
                <div className="mt-4 bg-white/10 border border-white/10 backdrop-blur text-white px-6 py-3 rounded-2xl text-sm flex flex-col items-center gap-2 shadow-2xl" onClick={e => e.stopPropagation()}>
                    <span className="font-bold text-blue-200 text-lg whitespace-pre-wrap text-center">{viewImage.title || '未命名图片'}</span>
@@ -1721,7 +1722,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                        <button onClick={() => { handleCopyImage(viewImage); }} disabled={copyingImage} className="bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
                            <Icon d={PATHS.Copy} className="w-3 h-3" /> {copyingImage ? '复制中...' : '复制图片'}
                        </button>
-                       <button onClick={() => { handleCopy(viewImage.title); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
+                       <button onClick={() => { updateActivity(); navigator.clipboard.writeText(viewImage.title); showImageCopyToast('标题已复制'); }} className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1">
                            <Icon d={PATHS.Copy} className="w-3 h-3" /> 复制快捷
                        </button>
                    </div>

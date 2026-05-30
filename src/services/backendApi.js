@@ -48,26 +48,45 @@ async function compressImageForUpload(file) {
         throw new Error('当前浏览器不支持图片压缩');
     }
 
-    const maxDimension = 2200;
+    const maxDimension = 1600;
     const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
     canvas.width = Math.max(1, Math.round(image.width * scale));
     canvas.height = Math.max(1, Math.round(image.height * scale));
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-    const qualities = [0.9, 0.82, 0.74, 0.66, 0.58, 0.5, 0.42];
-    for (const quality of qualities) {
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
-        if (!blob) continue;
+    // 二分查找最佳质量，避免线性尝试7次
+    const toBlobAt = (q) => new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', q));
+    let lo = 0.3, hi = 1.0;
+    let bestBlob = null;
 
-        const compressed = new File(
-            [blob],
+    for (let i = 0; i < 6; i++) {
+        const mid = (lo + hi) / 2;
+        const blob = await toBlobAt(mid);
+        if (!blob) break;
+        if (blob.size <= TARGET_UPLOAD_BYTES) {
+            bestBlob = blob;
+            lo = mid; // 尝试更高画质
+        } else {
+            hi = mid;
+        }
+    }
+
+    if (bestBlob) {
+        return new File(
+            [bestBlob],
             changeFileExtension(file.name, 'jpg'),
             { type: 'image/jpeg', lastModified: Date.now() }
         );
+    }
 
-        if (compressed.size <= TARGET_UPLOAD_BYTES) {
-            return compressed;
-        }
+    // 回退：最低画质
+    const fallback = await toBlobAt(0.25);
+    if (fallback) {
+        return new File(
+            [fallback],
+            changeFileExtension(file.name, 'jpg'),
+            { type: 'image/jpeg', lastModified: Date.now() }
+        );
     }
 
     throw new Error('图片过大，压缩后仍超过 Vercel 上传限制，请换一张更小的图片');

@@ -1449,7 +1449,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         )}
         {saveConfirmType && <SaveConfirmModal type={saveConfirmType} onClose={() => setSaveConfirmType(null)} onConfirm={executeSaveCloudPrompts} />}
         {notification && <NotificationModal {...notification} onClose={() => setNotification(null)} />}
-        {imageCopyToast && (
+        {!viewImage && imageCopyToast && (
             <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold shadow-xl border transition-all z-[100] ${imageCopyToast.type === 'error' ? 'bg-red-500/90 text-white border-red-300/40' : 'bg-emerald-500/90 text-white border-emerald-300/40'}`}>
                 {imageCopyToast.message}
             </div>
@@ -1714,7 +1714,11 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         {/* 图片预览及复制快捷按钮模态框 */}
         {viewImage && (
            <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex flex-col items-center justify-center p-4 fade-in" onClick={() => setViewImage(null)}>
-    
+               {imageCopyToast && (
+                   <div className={`absolute top-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-bold shadow-xl border transition-all ${imageCopyToast.type === 'error' ? 'bg-red-500/90 text-white border-red-300/40' : 'bg-emerald-500/90 text-white border-emerald-300/40'}`} onClick={e => e.stopPropagation()}>
+                       {imageCopyToast.message}
+                   </div>
+               )}
                <img src={`/api/images/${viewImage.id}`} className="max-w-full max-h-[70vh] object-contain shadow-2xl rounded-lg" onClick={(e) => e.stopPropagation()} />
                <div className="mt-4 bg-white/10 border border-white/10 backdrop-blur text-white px-6 py-3 rounded-2xl text-sm flex flex-col items-center gap-2 shadow-2xl" onClick={e => e.stopPropagation()}>
                    <span className="font-bold text-blue-200 text-lg whitespace-pre-wrap text-center">{viewImage.title || '未命名图片'}</span>

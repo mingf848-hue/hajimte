@@ -311,6 +311,71 @@ function mergeHybridResults(textResults, vectorResults, limit) {
     }));
 }
 
+const RAW_FALLBACK_COLLECTIONS = [
+  'knowledge_base',
+  'scripts',
+  'templates',
+  'training_data',
+  'venue_rules',
+  'global_settings',
+];
+
+function sourceDocToPlainObject(doc) {
+  if (!doc) return null;
+  const plain = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+  return {
+    ...plain,
+    _id: String(plain._id),
+  };
+}
+
+async function loadRawSourceDocs(db, sourceCollection) {
+  if (sourceCollection === 'global_settings') {
+    const doc = await db.collection(sourceCollection).findOne({ _id: 'ai_prompts' });
+    return doc ? [sourceDocToPlainObject(doc)] : [];
+  }
+
+  return db.collection(sourceCollection).find({}, { limit: 1000 }).toArray()
+    .then((docs) => docs.map(sourceDocToPlainObject).filter(Boolean));
+}
+
+async function runRawSourceFallbackSearch(db, { query, domain, venue, limit }) {
+  const units = [];
+
+  for (const sourceCollection of RAW_FALLBACK_COLLECTIONS) {
+    const docs = await loadRawSourceDocs(db, sourceCollection);
+    for (const doc of docs) {
+      units.push(...buildKnowledgeUnitsForDocument(sourceCollection, doc));
+    }
+  }
+
+  const normalizedVenue = normalizeString(venue).toLowerCase();
+  return units
+    .filter((unit) => !domain || unit.domain === domain)
+    .filter((unit) => {
+      if (!normalizedVenue) return true;
+      const unitVenue = normalizeString(unit.venue).toLowerCase();
+      const title = normalizeString(unit.title).toLowerCase();
+      const keywords = normalizeString(unit.keywordsText).toLowerCase();
+      return unitVenue.includes(normalizedVenue)
+        || normalizedVenue.includes(unitVenue)
+        || title.includes(normalizedVenue)
+        || keywords.includes(normalizedVenue);
+    })
+    .map((unit) => ({
+      ...unit,
+      _id: unit._id,
+      score: scoreLexicalMatch(unit, query),
+      retrievalSource: 'raw_source',
+      matchedBy: ['raw_source'],
+      hybridScore: scoreLexicalMatch(unit, query),
+      id: unit._id,
+    }))
+    .filter((unit) => unit.score > 0 || (normalizedVenue && unit.venue))
+    .sort((a, b) => b.hybridScore - a.hybridScore)
+    .slice(0, limit);
+}
+
 export function buildKnowledgePrompt(results) {
   if (!Array.isArray(results) || results.length === 0) {
     return '无';
@@ -372,6 +437,26 @@ export async function retrieveKnowledgeContext({ query, coreIntent = '', venue =
     });
   }
 
+  if (textResults.length === 0 && vectorResults.length === 0 && venue) {
+    try {
+      textResults = await runAtlasTextSearch(collection, {
+        query,
+        domain: domainHint,
+        venue: '',
+        limit: env.RAG_TEXT_RESULT_LIMIT,
+      });
+      retrievalMode = 'text_domain_broadened';
+    } catch {
+      textResults = await runFallbackSearch(collection, {
+        query,
+        domain: domainHint,
+        venue: '',
+        limit: env.RAG_TEXT_RESULT_LIMIT,
+      });
+      retrievalMode = 'fallback_domain_broadened';
+    }
+  }
+
   if (textResults.length === 0 && vectorResults.length === 0 && (domainHint || venue)) {
     try {
       textResults = await runAtlasTextSearch(collection, {
@@ -392,7 +477,27 @@ export async function retrieveKnowledgeContext({ query, coreIntent = '', venue =
     }
   }
 
-  const results = mergeHybridResults(textResults, vectorResults, limit);
+  let results = mergeHybridResults(textResults, vectorResults, limit);
+  if (results.length === 0) {
+    results = await runRawSourceFallbackSearch(db, {
+      query,
+      domain: domainHint,
+      venue,
+      limit,
+    });
+    retrievalMode = results.length > 0 ? 'raw_source' : retrievalMode;
+  }
+
+  if (results.length === 0 && (domainHint || venue)) {
+    results = await runRawSourceFallbackSearch(db, {
+      query,
+      domain: '',
+      venue: '',
+      limit,
+    });
+    retrievalMode = results.length > 0 ? 'raw_source_broadened' : retrievalMode;
+  }
+
   return {
     domain: domainHint,
     retrievalMode,
@@ -556,7 +661,12 @@ export async function syncKnowledgeUnitsForDocument(sourceCollection, doc) {
   let units = buildKnowledgeUnitsForDocument(sourceCollection, { ...doc, _id: sourceId });
   if (units.length === 0) return { success: true, deleted: true, inserted: 0 };
 
-  units = await createEmbeddingsForUnits(units);
+  try {
+    units = await createEmbeddingsForUnits(units);
+  } catch (error) {
+    units = units.map((unit) => ({ ...unit, embeddingError: error?.message || 'Embedding unavailable' }));
+  }
+
   await collection.bulkWrite(units.map((unit) => ({
     updateOne: {
       filter: { _id: unit._id },

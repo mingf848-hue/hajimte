@@ -570,6 +570,22 @@ function App() {
         return /(话术|怎么回|如何回|帮我回|给我.*回复|重新写|改写|润色|按照.*回|根据.*写|直接回)/i.test(recentUserText);
     }, []);
 
+    const buildRagQuery = React.useCallback((latestText, history = [], triage = {}, venueName = '') => {
+        const recentUserTurns = history
+            .slice(-6)
+            .filter(msg => msg.role === 'user')
+            .map(msg => msg.displayContent || (typeof msg.content === 'string' ? msg.content : ''))
+            .filter(Boolean);
+
+        return [
+            `最新问题：${latestText}`,
+            recentUserTurns.length > 0 ? `最近用户上下文：${recentUserTurns.join('\n')}` : '',
+            triage.core_intent ? `业务意图：${triage.core_intent}` : '',
+            venueName ? `场馆/类别：${venueName}` : '',
+            triage.extracted_order_id ? `注单号：${triage.extracted_order_id}` : '',
+        ].filter(Boolean).join('\n');
+    }, []);
+
     const handleCallAI = async (modeOverride = chatPromptMode) => {
         updateActivity(); 
         if (!customerInput.trim() && pastedImages.length === 0) return; 
@@ -738,7 +754,7 @@ function App() {
            - 客观注单数据（如有）：${betContext || '无'}
            - 赛事异常公告（如有）：${noticeContext || '无'}
 
-           *注意：请结合用户原始输入、客观注单数据、公告和 RAG 命中内容回复。不要暴露你的思考过程，直接给出可复制到群里的回复。如果注单未结算，在结尾加入 <<<ACTION_TRACK>>> 触发监控。涉及场馆规则、盘口规则、赔率计算、结算细则的问题，必须优先依据命中的知识条款；没有命中可靠条款时，不要编造，改为要求补充注单号、场馆、玩法、截图或转人工核实。*
+           *注意：请结合用户原始输入、客观注单数据、公告和 RAG 命中内容回复。不要暴露你的思考过程，直接给出可复制到群里的回复。如果注单未结算，在结尾加入 <<<ACTION_TRACK>>> 触发监控。涉及场馆规则、盘口规则、赔率计算、结算细则的问题，必须优先依据命中的知识条款；没有命中可靠条款时，不要编造，改为要求补充注单号、场馆、玩法、截图或转人工核实。历史 assistant 回复只能当作上下文，不能当作事实来源。*
            `;
 
            if (internalDraftRequest) {
@@ -755,7 +771,8 @@ function App() {
 
            let ragContext = { domain: 'general_policy', retrievalMode: 'none', results: [], prompt: '无' };
            try {
-               ragContext = await window.fbOps.retrieveRagContext(currentUserMsg, {
+               const ragQuery = buildRagQuery(currentUserMsg, currentFullHistory, triageResult, matchedVenue?.name || '');
+               ragContext = await window.fbOps.retrieveRagContext(ragQuery, {
                    coreIntent: triageResult.core_intent,
                    venue: matchedVenue?.name || '',
                });
@@ -771,6 +788,12 @@ function App() {
            - 命中知识条数：${Array.isArray(ragContext.results) ? ragContext.results.length : 0}
            - 命中知识详情：
            ${ragContext.prompt || '无'}
+
+           【事实来源优先级】：
+           1. 客观注单数据、赛事异常公告、RAG 命中知识。
+           2. 用户最新输入中的明确事实。
+           3. 历史对话仅用于理解用户在改什么，不得把 assistant 旧回复当成事实。
+           如果第 1、2 项没有足够依据，请明确要求补充材料或转人工核实，不要自行补全规则、流程、金额、结算原因。
            `;
 
            let redLinesContext = "";

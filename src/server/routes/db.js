@@ -65,6 +65,10 @@ export function createDbRouter() {
       }
 
       let query = Model.find(filter);
+      // Legacy image documents may contain a full base64 payload. The list API
+      // only needs metadata; returning imageData here re-downloads every image
+      // on each login and bypasses the dedicated cached image endpoint.
+      if (req.params.collection === 'images') query = query.select('-imageData');
       if (policy.sort) query = query.sort(policy.sort);
       if (req.query.limit) query = query.limit(Math.min(Number(req.query.limit), 5000));
 

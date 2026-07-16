@@ -15,6 +15,7 @@ import { callGeminiJSON, callGeminiStream } from './api.js';
 import { BetQuery, TrackerModal } from './betTracker.jsx';
 import { DBS_API } from './dbsApi.js';
 import {
+    CachedImage,
     ChatMessage,
     DebugModal,
     GeneralConfirmModal,
@@ -26,6 +27,7 @@ import {
     SaveConfirmModal,
     StatusBar,
 } from './components.jsx';
+import { getCachedImageBlob, removeCachedImage } from '../services/imageCache.js';
 
 // ==========================================
 // 主应用组件 App
@@ -957,7 +959,7 @@ function App() {
         window.addEventListener('paste', handlePaste);
         return () => window.removeEventListener('paste', handlePaste);
     }, [showImageModal]);
-const handleUploadImage = async () => { updateActivity(); if (!imageForm.file || !imageForm.tags) return showImageCopyToast('请选择图片并填写标签', 'error'); setUploading(true); try { await window.fbOps.uploadImage(imageForm.file, imageForm.title || 'img', imageForm.tags); const i = await window.fbOps.getImages(); setImages(i); setShowImageModal(false); } catch (e) { showImageCopyToast(e.message || '上传失败', 'error'); } setUploading(false); };
+const handleUploadImage = async () => { updateActivity(); if (!imageForm.file || !imageForm.tags) return showImageCopyToast('请选择图片并填写标签', 'error'); setUploading(true); try { const updatedImages = await window.fbOps.uploadImage(imageForm.file, imageForm.title || 'img', imageForm.tags); setImages(updatedImages || []); setShowImageModal(false); } catch (e) { showImageCopyToast(e.message || '上传失败', 'error'); } setUploading(false); };
     const handleDelete = async (type, item) => { updateActivity(); if (type === 'script' && userRole !== 'admin') { setShowPermissionModal(true); return; } setPendingDelete({ type, item }); setShowDeleteModal(true); };
     
     const handleLikeMsg = async (idx) => { 
@@ -1012,12 +1014,7 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
 
         setCopyingImage(true);
         try {
-            const response = await fetch(`/api/images/${image.id}`);
-            if (!response.ok) {
-                throw new Error('图片读取失败');
-            }
-
-            const blob = await response.blob();
+            const blob = await getCachedImageBlob(image.id);
             await navigator.clipboard.write([
                 new ClipboardItem({
                     [blob.type || 'image/png']: blob,
@@ -1039,7 +1036,7 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
     const startEdit = (s) => { updateActivity(); setScriptForm(s); setShowScriptModal(true); };
     const openAddScript = () => { updateActivity(); setScriptForm({ id: 'new_', category: '', keywords: '', content: '' }); setShowScriptModal(true); };
     const cancelEdit = () => { setShowScriptModal(false); setScriptForm({ id: '', category: '', keywords: '', content: '' }); };
-    const executeDelete = async () => { if (!pendingDelete) return; const { type, id, item } = pendingDelete; setLoading(true); try { if (type === 'template') { const updatedTemplates = await window.fbOps.deleteTemplate(id); setAllTemplates(updatedTemplates); await buildStaticCache(updatedTemplates, annKnowledge); if (templateForm.id === id) { setTemplateForm({ id: null, type: '', front: '', inner: '', mail: '' }); setViewTemplate(null); setIsEditingTemplate(false); } } else if (type === 'script') { await window.fbOps.deleteScript(item.id); setScripts(await window.fbOps.getScripts()); await loadData(); } else if (type === 'image') { await window.fbOps.deleteImage(item.id); setImages(await window.fbOps.getImages()); } else if (type === 'chat_log') { setChatLogs(await window.fbOps.deleteTrainingData(id)); } else if (type === 'ann_log') { setAnnLogs(await window.fbOps.deleteAnnLog(id)); } if (type === 'image') { showImageCopyToast('图片已删除'); } else { setNotification({ title: "删除成功", message: "已永久删除。", type: "success" }); } } catch(e) { if (type === 'image') { showImageCopyToast('删除失败', 'error'); } else { setNotification({title: '删除失败', message: '操作未能完成', type: 'error'}); } } setLoading(false); setShowDeleteModal(false); setPendingDelete(null); };
+    const executeDelete = async () => { if (!pendingDelete) return; const { type, id, item } = pendingDelete; setLoading(true); try { if (type === 'template') { const updatedTemplates = await window.fbOps.deleteTemplate(id); setAllTemplates(updatedTemplates); await buildStaticCache(updatedTemplates, annKnowledge); if (templateForm.id === id) { setTemplateForm({ id: null, type: '', front: '', inner: '', mail: '' }); setViewTemplate(null); setIsEditingTemplate(false); } } else if (type === 'script') { await window.fbOps.deleteScript(item.id); setScripts(await window.fbOps.getScripts()); await loadData(); } else if (type === 'image') { const updatedImages = await window.fbOps.deleteImage(item.id); await removeCachedImage(item.id); setImages(updatedImages || []); } else if (type === 'chat_log') { setChatLogs(await window.fbOps.deleteTrainingData(id)); } else if (type === 'ann_log') { setAnnLogs(await window.fbOps.deleteAnnLog(id)); } if (type === 'image') { showImageCopyToast('图片已删除'); } else { setNotification({ title: "删除成功", message: "已永久删除。", type: "success" }); } } catch(e) { if (type === 'image') { showImageCopyToast('删除失败', 'error'); } else { setNotification({title: '删除失败', message: '操作未能完成', type: 'error'}); } } setLoading(false); setShowDeleteModal(false); setPendingDelete(null); };
 
     const handleSaveAccount = async () => {
         if (!accountForm.username) return setNotification({title: '提示', message: '请填写用户名', type: 'error'});
@@ -1742,7 +1739,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                        {imageCopyToast.message}
                    </div>
                )}
-               <img src={`/api/images/${viewImage.id}`} className="max-w-full max-h-[70vh] object-contain shadow-2xl rounded-lg" onClick={(e) => e.stopPropagation()} />
+               <CachedImage imageId={viewImage.id} alt={viewImage.title || '图片预览'} className="max-w-full max-h-[70vh] object-contain shadow-2xl rounded-lg" onClick={(e) => e.stopPropagation()} />
                <div className="mt-4 bg-white/10 border border-white/10 backdrop-blur text-white px-6 py-3 rounded-2xl text-sm flex flex-col items-center gap-2 shadow-2xl" onClick={e => e.stopPropagation()}>
                    <span className="font-bold text-blue-200 text-lg whitespace-pre-wrap text-center">{viewImage.title || '未命名图片'}</span>
                    <div className="flex gap-2">
@@ -1778,7 +1775,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         <header className="app-header px-3 py-2 flex justify-between items-center z-20 shrink-0">
           <div className="flex items-center gap-3 overflow-hidden">
             <h1 className="app-brand shrink-0">
-              <img src="https://lh3.googleusercontent.com/d/1Rri7vVK9YyhQEdqzvgmjQ4kzNZdbQuxV" alt="Logo" className="w-7 h-7 object-contain rounded-lg" onError={(e)=>{e.target.src="https://via.placeholder.com/64?text=Cat"}} />
+              <img src="/logo.png" alt="Logo" className="w-7 h-7 object-contain rounded-lg" />
               <span className="hidden xs:inline">哈基米助手</span>
               <span className="dot-grad hidden md:inline-block" title="在线"></span>
             </h1>
@@ -2239,7 +2236,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4 pb-20 md:pb-0">
                         {filteredImages.map(img => (
                             <div key={img.id} onClick={() => setViewImage(img)} className="group bg-white rounded-xl border border-zinc-200 cursor-pointer shadow-sm active:scale-95 transition-all duration-200 relative overflow-hidden">
-                                <div className="aspect-video bg-slate-100 flex items-center justify-center relative overflow-hidden"><img src={`/api/images/${img.id}`} className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); handleDelete('image', img); }} className="absolute top-1 right-1 bg-black/50 text-white p-1.5 rounded-full md:opacity-0 group-hover:opacity-100 transition backdrop-blur-sm"><Icon d={PATHS.Trash} className="w-4 h-4"/></button></div>
+                                <div className="aspect-video bg-slate-100 flex items-center justify-center relative overflow-hidden"><CachedImage imageId={img.id} alt={img.title || '图片'} loading="lazy" decoding="async" className="w-full h-full object-cover"/><button onClick={(e) => { e.stopPropagation(); handleDelete('image', img); }} className="absolute top-1 right-1 bg-black/50 text-white p-1.5 rounded-full md:opacity-0 group-hover:opacity-100 transition backdrop-blur-sm"><Icon d={PATHS.Trash} className="w-4 h-4"/></button></div>
                                 <div className="p-2"><div className="font-bold text-xs text-slate-700 whitespace-pre-wrap line-clamp-2">{img.title}</div><div className="text-[10px] text-slate-400 truncate">{img.tags}</div></div>
                             </div>
                         ))}

@@ -47,7 +47,10 @@ export async function createServerApp() {
 
       if (filePath.includes(`${path.sep}assets${path.sep}`)) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        return;
       }
+
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
     },
   }));
   app.get('*', (_req, res) => {

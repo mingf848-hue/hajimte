@@ -1,5 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PATHS } from './config.jsx';
+import { getCachedImageObjectUrl } from '../services/imageCache.js';
 
 // ==========================================
 // 共享 UI 组件
@@ -11,6 +12,49 @@ export function Icon({ d, className }) {
             <path d={d} />
         </svg>
     );
+}
+
+export function CachedImage({ imageId, alt = '', loading, ...props }) {
+    const [src, setSrc] = useState('');
+    const imageRef = useRef(null);
+
+    useEffect(() => {
+        let active = true;
+        let objectUrl = '';
+        let observer = null;
+
+        setSrc('');
+        const loadImage = () => {
+            getCachedImageObjectUrl(imageId)
+                .then((url) => {
+                    objectUrl = url;
+                    if (active) setSrc(url);
+                    else URL.revokeObjectURL(url);
+                })
+                .catch(() => {
+                    if (active) setSrc(`/api/images/${encodeURIComponent(String(imageId))}`);
+                });
+        };
+
+        if (loading === 'lazy' && typeof IntersectionObserver !== 'undefined') {
+            observer = new IntersectionObserver((entries) => {
+                if (!entries.some((entry) => entry.isIntersecting)) return;
+                observer.disconnect();
+                loadImage();
+            }, { rootMargin: '240px' });
+            observer.observe(imageRef.current);
+        } else {
+            loadImage();
+        }
+
+        return () => {
+            active = false;
+            observer?.disconnect();
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [imageId, loading]);
+
+    return <img ref={imageRef} src={src || undefined} alt={alt} loading={loading} {...props} />;
 }
 
 export function LoginScreen({ onLogin }) {
@@ -46,7 +90,7 @@ export function LoginScreen({ onLogin }) {
             <div className="login-card fade-in">
                 <div className="login-card__logo-wrap">
                     <div className="login-card__logo-inner">
-                        <img src="https://lh3.googleusercontent.com/d/1Rri7vVK9YyhQEdqzvgmjQ4kzNZdbQuxV" className="w-full h-full object-contain rounded-2xl" onError={(e) => { e.target.src = "https://via.placeholder.com/64?text=Cat" }} />
+                        <img src="/logo.png" alt="哈基米助手" className="w-full h-full object-contain rounded-2xl" />
                     </div>
                 </div>
                 <h2 className="login-card__title">Welcome back!</h2>

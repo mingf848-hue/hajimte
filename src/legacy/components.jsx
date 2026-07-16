@@ -90,7 +90,7 @@ export function LoginScreen({ onLogin }) {
             <div className="login-card fade-in">
                 <div className="login-card__logo-wrap">
                     <div className="login-card__logo-inner">
-                        <img src="/logo.png" alt="哈基米助手" className="w-full h-full object-contain rounded-2xl" />
+                        <img src="/avatar.png" alt="哈基米助手" className="w-full h-full object-contain rounded-2xl" onError={(event) => { event.currentTarget.src = '/logo.png'; }} />
                     </div>
                 </div>
                 <h2 className="login-card__title">Welcome back!</h2>

@@ -1775,7 +1775,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
         <header className="app-header px-3 py-2 flex justify-between items-center z-20 shrink-0">
           <div className="flex items-center gap-3 overflow-hidden">
             <h1 className="app-brand shrink-0">
-              <img src="/logo.png" alt="Logo" className="w-7 h-7 object-contain rounded-lg" />
+              <img src="/avatar.png" alt="Logo" className="w-7 h-7 object-contain rounded-lg" onError={(event) => { event.currentTarget.src = '/logo.png'; }} />
               <span className="hidden xs:inline">哈基米助手</span>
               <span className="dot-grad hidden md:inline-block" title="在线"></span>
             </h1>

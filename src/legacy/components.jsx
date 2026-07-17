@@ -382,6 +382,8 @@ export const ChatMessage = React.memo(({ msg, idx, activeMsgIndex, feedbackState
     const intentCode = msg.role === 'assistant' && msg.triageData && msg.triageData.core_intent;
     const intentInfo = intentCode ? (INTENT_META[intentCode] || INTENT_META.OTHER) : null;
     const matchedVenue = msg.triageData && msg.triageData.matched_venue;
+    const executionPlan = msg.triageData?.execution_plan;
+    const adherence = msg.triageData?.adherence;
     return (
         <div className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} fade-in group`}>
             {intentInfo && (
@@ -390,6 +392,25 @@ export const ChatMessage = React.memo(({ msg, idx, activeMsgIndex, feedbackState
                     <span>意图：{intentInfo.label}</span>
                     {matchedVenue && <span className="opacity-80">· {matchedVenue}</span>}
                 </div>
+            )}
+            {msg.role === 'assistant' && executionPlan?.operator_led && (
+                <details className="mb-1 max-w-[90%] rounded-lg border border-violet-100 bg-violet-50/80 px-2.5 py-1.5 text-[11px] text-violet-800">
+                    <summary className="cursor-pointer select-none font-bold">
+                        已锁定你的处理思路
+                        {adherence === 'passed' && <span className="ml-2 text-emerald-600">· 校验通过</span>}
+                        {adherence === 'corrected' && <span className="ml-2 text-amber-600">· 已自动纠偏</span>}
+                        {adherence === 'unverified' && <span className="ml-2 text-slate-500">· 保留原稿</span>}
+                    </summary>
+                    <div className="mt-1.5 space-y-1 border-t border-violet-100 pt-1.5">
+                        {executionPlan.goal && <div><span className="font-bold">目标：</span>{executionPlan.goal}</div>}
+                        {executionPlan.must_follow?.length > 0 && (
+                            <div><span className="font-bold">必须执行：</span>{executionPlan.must_follow.join('；')}</div>
+                        )}
+                        {executionPlan.must_not?.length > 0 && (
+                            <div><span className="font-bold">禁止：</span>{executionPlan.must_not.join('；')}</div>
+                        )}
+                    </div>
+                </details>
             )}
             <div className={`p-3 max-w-[90%] text-sm leading-relaxed ${msg.role === 'user' ? 'bg-zinc-900 text-white rounded-2xl rounded-tr-sm' : 'bg-white border border-zinc-100 text-zinc-800 rounded-2xl rounded-tl-sm shadow-sm'}`}>
                 {msg.displayImages && msg.displayImages.length > 0 && (
@@ -408,7 +429,7 @@ export const ChatMessage = React.memo(({ msg, idx, activeMsgIndex, feedbackState
                 )}
                 {activeMsgIndex === idx && feedbackState === 'rating_bad' && (
                     <div className="mt-2 flex gap-2 w-full fade-in pt-1">
-                        <input value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="输入正确的话术标准..." className="flex-1 text-xs border border-red-200 rounded px-2 py-1.5 outline-none focus:ring-1 ring-red-500 bg-white text-slate-700" />
+                        <textarea value={correctionText} onChange={e => setCorrectionText(e.target.value)} placeholder="写出正确话术或明确处理标准；错误答案不会被学习。" className="flex-1 min-h-16 resize-y text-xs border border-red-200 rounded px-2 py-1.5 outline-none focus:ring-1 ring-red-500 bg-white text-slate-700" />
                         <button onClick={submitCorrectionMsg} className="bg-red-500 hover:bg-red-600 text-white px-3 rounded text-xs font-bold transition whitespace-nowrap shadow-sm">提交学习</button>
                         <button onClick={() => { setActiveMsgIndex(-1); setFeedbackState('none'); }} className="text-slate-400 hover:text-slate-600 p-1"><Icon d={PATHS.Close} className="w-4 h-4" /></button>
                     </div>

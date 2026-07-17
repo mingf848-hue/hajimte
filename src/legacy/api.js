@@ -140,7 +140,7 @@ export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MOD
             if (text) {
                 fullText += text;
                 const visibleText = normalizeModelText(fullText);
-                if (visibleText && onChunk) onChunk(text, visibleText);
+                if (visibleText && onChunk) onChunk(text, visibleText, fullText);
             }
             if (item.usageMetadata) {
                 finalUsage = item.usageMetadata;
@@ -203,7 +203,7 @@ export const callGeminiStream = async (messages, temp = 0.4, onChunk, mode = MOD
                 const fallbackText = normalizeModelText(getCandidateText(fallbackData?.candidates?.[0]));
                 if (fallbackText) {
                     fullText = fallbackText;
-                    if (onChunk) onChunk(fallbackText, fallbackText);
+                    if (onChunk) onChunk(fallbackText, fallbackText, fallbackText);
                     finalUsage = fallbackData?.usageMetadata || finalUsage;
                 } else {
                     const hint = getUpstreamHint(fallbackData);

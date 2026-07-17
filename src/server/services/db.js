@@ -49,6 +49,7 @@ async function ensureIndexes() {
     db.collection('images').createIndex({ time: -1 }, { background: true }),
     db.collection('announcement_logs').createIndex({ time: -1 }, { background: true }),
     db.collection('training_data').createIndex({ time: -1 }, { background: true }),
+    db.collection('training_data').createIndex({ type: 1, time: -1 }, { background: true }),
     db.collection('knowledge_units').createIndex({ domain: 1, enabled: 1, sourceCollection: 1 }, { background: true }),
     db.collection('knowledge_units').createIndex({ venue: 1, enabled: 1 }, { background: true }),
     db.collection('knowledge_units').createIndex(

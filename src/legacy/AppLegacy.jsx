@@ -15,6 +15,17 @@ import { callGeminiJSON, callGeminiStream } from './api.js';
 import { BetQuery, TrackerModal } from './betTracker.jsx';
 import { DBS_API } from './dbsApi.js';
 import {
+    buildAdherenceReviewPrompt,
+    buildExecutionPrompt,
+    buildPlannerPrompt,
+    buildRagQuery as buildPolicyRagQuery,
+    createFallbackExecutionPlan,
+    getAiPhaseLabel,
+    normalizeAdherenceReview,
+    normalizeExecutionPlan,
+    selectConversationHistory,
+} from '../services/chatPolicy.js';
+import {
     CachedImage,
     ChatMessage,
     DebugModal,
@@ -47,6 +58,8 @@ function App() {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState(''); 
     const [customerInput, setCustomerInput] = useState('');
+    const [operatorInstruction, setOperatorInstruction] = useState('');
+    const [chatOutputMode, setChatOutputMode] = useState('reply');
     
     const [chatHistory, setChatHistory] = useState([]);
     const [pastedImages, setPastedImages] = useState([]);
@@ -54,9 +67,9 @@ function App() {
     const chatHistoryRef = useRef([]);
 
     const [aiReply, setAiReply] = useState('');
-    const [aiPhase, setAiPhase] = useState(''); // 'triage' | 'execution' | ''
+    const [aiPhase, setAiPhase] = useState(''); // planning | retrieval | execution | review | ''
     const [aiLoading, setAiLoading] = useState(false);
-    const [chatPromptMode, setChatPromptMode] = useState('strict'); // 'strict' | 'free'
+    const [chatPromptMode, setChatPromptMode] = useState('strict'); // strict=按思路执行, free=自动处理
     const [scriptForm, setScriptForm] = useState({ id: '', category: '', keywords: '', content: '' });
     const [saveStatus, setSaveStatus] = useState('idle');
     const [feedbackState, setFeedbackState] = useState('none');
@@ -121,7 +134,6 @@ function App() {
     const [hasUnreadUpdates, setHasUnreadUpdates] = useState(false); 
     const [trackerMsg, setTrackerMsg] = useState(''); 
     const trackedTicketsRef = useRef([]);
-    const trainingDataRef = useRef([]);
 
     const [accounts, setAccounts] = useState([]);
     const [showAccountModal, setShowAccountModal] = useState(false);
@@ -183,11 +195,7 @@ function App() {
         try {
             if (!window.fbOps) throw new Error("fbOps not loaded");
             const user = localStorage.getItem(SESSION_KEY_USER);
-            const [data, trainingData] = await Promise.all([
-                window.UtilsLib.loadDataInParallel(window.fbOps, user),
-                window.UtilsLib.safeLoad(() => window.fbOps.getTrainingDataAll(), []),
-            ]);
-            trainingDataRef.current = trainingData;
+            const data = await window.UtilsLib.loadDataInParallel(window.fbOps, user);
 
             setScripts(data.scripts || []);
             setExtraKnowledge(data.knowledge || []);
@@ -514,6 +522,7 @@ function App() {
         setChatHistory([]);
         setAiReply('');
         setCustomerInput('');
+        setOperatorInstruction('');
         setPastedImages([]);
         setFeedbackState('none');
         setActiveMsgIndex(-1);
@@ -537,13 +546,6 @@ function App() {
             return name && normalized.includes(name);
         }) || null;
     }, [venueRules]);
-
-    const shouldRunTriage = React.useCallback((text, directVenue, orderId) => {
-        if (orderId || directVenue) return true;
-        if (typeof text !== 'string') return false;
-
-        return /(账号|被盗|风控|封号|冻结|充值|到账|彩金|优惠|活动|注单|订单|赛事|结算|串关|连串|盘口|赔率|走水|赢半|输半|规则|场馆|真人|电子|体育|公告|取消|拒单|无效)/i.test(text);
-    }, []);
 
     const inferIntentHeuristically = React.useCallback((text, directVenue, orderId, hasImages) => {
         if (hasImages) return 'IMAGE_ANALYSIS';
@@ -572,25 +574,9 @@ function App() {
         return /(话术|怎么回|如何回|帮我回|给我.*回复|重新写|改写|润色|按照.*回|根据.*写|直接回)/i.test(recentUserText);
     }, []);
 
-    const buildRagQuery = React.useCallback((latestText, history = [], triage = {}, venueName = '') => {
-        const recentUserTurns = history
-            .slice(-6)
-            .filter(msg => msg.role === 'user')
-            .map(msg => msg.displayContent || (typeof msg.content === 'string' ? msg.content : ''))
-            .filter(Boolean);
-
-        return [
-            `最新问题：${latestText}`,
-            recentUserTurns.length > 0 ? `最近用户上下文：${recentUserTurns.join('\n')}` : '',
-            triage.core_intent ? `业务意图：${triage.core_intent}` : '',
-            venueName ? `场馆/类别：${venueName}` : '',
-            triage.extracted_order_id ? `注单号：${triage.extracted_order_id}` : '',
-        ].filter(Boolean).join('\n');
-    }, []);
-
     const handleCallAI = async (modeOverride = chatPromptMode) => {
         updateActivity(); 
-        if (!customerInput.trim() && pastedImages.length === 0) return; 
+        if (!customerInput.trim() && !operatorInstruction.trim() && pastedImages.length === 0) return;
         
         setAiLoading(true); 
         setAiReply(''); 
@@ -598,6 +584,8 @@ function App() {
         setLastUsage(null);
         
         const currentUserMsg = customerInput;
+        const currentOperatorInstruction = operatorInstruction.trim();
+        const currentOutputMode = chatOutputMode;
         const currentImages = [...pastedImages];
         
         let currentUserContent = [];
@@ -607,11 +595,22 @@ function App() {
         currentUserContent.push({ text: currentUserMsg });
         const requestId = `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         
-        const displayUserMsg = { role: 'user', content: currentUserContent, displayContent: currentUserMsg, displayImages: currentImages };
+        const displayContent = currentOperatorInstruction
+            ? `【我的处理思路】\n${currentOperatorInstruction}${currentUserMsg ? `\n\n【会员问题 / 原始素材】\n${currentUserMsg}` : ''}`
+            : currentUserMsg;
+        const displayUserMsg = {
+            role: 'user',
+            content: currentUserContent,
+            displayContent,
+            caseMaterial: currentUserMsg,
+            operatorInstruction: currentOperatorInstruction,
+            displayImages: currentImages,
+        };
         const assistantPlaceholder = { role: 'assistant', content: '', displayContent: '', pending: true, requestId };
         const currentFullHistory = [...chatHistoryRef.current, displayUserMsg];
         setChatHistory([...currentFullHistory, assistantPlaceholder]);
         setCustomerInput('');
+        setOperatorInstruction('');
         setPastedImages([]);
 
         const updateAssistantMessage = (content, triageData = null) => {
@@ -631,82 +630,47 @@ function App() {
 
         try {
            const currentMode = modeOverride || 'strict';
-           if (currentMode === 'free') {
-               setAiPhase('execution');
-               const historyToSend = currentFullHistory.slice(0, -1).map(msg => {
-                   let txt = msg.displayContent;
-                   if (!txt && typeof msg.content === 'string') txt = msg.content;
-                   return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: txt || " " };
-               });
-
-               const finalContent = [];
-               currentImages.forEach(img => { finalContent.push({ inlineData: { mimeType: img.mimeType, data: img.data } }); });
-               finalContent.push({ text: currentUserMsg });
-
-               const res = await callGeminiStream([
-                   ...historyToSend,
-                   { role: 'user', content: finalContent }
-               ], 0.45, (_chunk, fullText) => {
-                   setAiReply(fullText);
-                   if (fullText.trim()) updateAssistantMessage(fullText, null);
-               }, MODE_FAST);
-
-               if (res.error) {
-                   const errMsg = "AI Error: " + res.error;
-                   setAiReply(errMsg);
-                   finalizeAssistantMessage(errMsg, null);
-               } else if (res.success && res.data) {
-                   finalizeAssistantMessage(res.data, null);
-               } else {
-                   const fallbackMsg = 'AI 请求已结束，但没有得到明确结果。请稍后重试，或查看 Vercel 日志确认是否发生函数超时。';
-                   setAiReply(fallbackMsg);
-                   finalizeAssistantMessage(fallbackMsg, null);
-               }
-               if (res.usage) setLastUsage(res.usage);
-               if (res.cacheAction) setLastCacheMeta({ action: res.cacheAction, model: res.cacheModel, thinkingLevel: res.thinkingLevel });
-               setAiPhase('');
-               setAiLoading(false);
-               return;
-           }
-
            const directVenueMatch = findDirectVenueMatch(currentUserMsg);
            const likelyOrderId = extractLikelyOrderId(currentUserMsg);
-           const runTriage = currentImages.length === 0 && shouldRunTriage(currentUserMsg, directVenueMatch, likelyOrderId);
-           const internalDraftRequest = isInternalDraftRequest(currentUserMsg, currentFullHistory);
            const venueNames = venueRules.map(v => v.name).filter(Boolean);
-           const venueListHint = venueNames.length > 0 ? `当前已收录的场馆有：${venueNames.join('、')}。若用户提到这些场馆，intent 可设为 CASINO_RULE。` : '';
+           const fallbackPlan = createFallbackExecutionPlan({
+               caseText: currentUserMsg,
+               operatorInstruction: currentOperatorInstruction,
+               outputMode: currentOutputMode,
+               coreIntent: inferIntentHeuristically(currentUserMsg, directVenueMatch, likelyOrderId, currentImages.length > 0),
+               matchedVenue: directVenueMatch?.name || null,
+               orderId: likelyOrderId,
+               hasImages: currentImages.length > 0,
+           });
 
-           const triageSchema = `
-           {
-             "core_intent": "主要核心诉求(枚举: ACCOUNT_SECURITY/账号安全被盗, ACCOUNT_LOCK/风控封号, DEPOSIT_ISSUE/充值未到, PROMO_CLAIM/活动彩金, GAME_RESULT/注单结算疑问, SPORT_RULE/体育盘口规则咨询, CASINO_RULE/真人或电子场馆规则, COMPLAINT_AGENT/代理投诉或对接问题, COMPLAINT_HARASS/闹事谩骂骚扰, OTHER/其他)",
-             "matched_venue": "若 intent 为 CASINO_RULE 或 SPORT_RULE 并能判定具体场馆/体育类别名称，在此填其名称，否则为null",
-             "noise_detected": ["用户话术中用于干扰的次要或情绪词汇"],
-             "extracted_order_id": "如果用户提供了5开头的纯数字注单号(15位以上)，在此提取，否则为null"
-           }`;
-
-           const triagePrompt = `你是一个冷酷的“后台风控分诊员”。
-           任务：分析用户最新输入的工单，剥离一切噪音，只提取最核心的业务意图，并以纯 JSON 返回。
-           ${venueListHint}
-           【输出Schema】: ${triageSchema}
-           【用户最新输入】: ${currentUserMsg}`;
-
-           const triageMessages = [ { role: 'system', content: 'You are a JSON extractor for Risk Control.' }, { role: 'user', content: triagePrompt } ];
-           
+           setAiPhase('planning');
+           const plannerPrompt = buildPlannerPrompt({
+               caseText: currentUserMsg,
+               operatorInstruction: currentOperatorInstruction,
+               outputMode: currentOutputMode,
+               venueNames,
+           });
+           const plannerRes = await callGeminiJSON([
+               { role: 'system', content: '你只负责把运营的本轮要求编译成执行合同。不得过滤、弱化或反驳运营的明确处理思路。只输出 JSON。' },
+               { role: 'user', content: plannerPrompt },
+           ], 0.1, MODE_FAST);
+           const executionPlan = normalizeExecutionPlan(
+               plannerRes.success ? plannerRes.data : null,
+               fallbackPlan,
+               { operatorInstruction: currentOperatorInstruction, outputMode: currentOutputMode },
+           );
+           const internalDraftRequest = executionPlan.task_type === 'DRAFT_REPLY'
+               || executionPlan.task_type === 'REWRITE'
+               || isInternalDraftRequest(currentUserMsg, currentFullHistory);
            let triageResult = {
-               core_intent: inferIntentHeuristically(currentUserMsg, directVenueMatch, likelyOrderId, currentImages.length > 0),
-               matched_venue: directVenueMatch?.name || null,
-               noise_detected: [],
-               extracted_order_id: likelyOrderId,
+               core_intent: executionPlan.core_intent,
+               matched_venue: executionPlan.matched_venue,
+               extracted_order_id: executionPlan.extracted_order_id,
+               execution_plan: executionPlan,
+               operator_led: executionPlan.operator_led,
+               adherence: 'pending',
            };
 
-           if (runTriage) {
-               setAiPhase('triage');
-               const tRes = await callGeminiJSON(triageMessages, 0.1, MODE_FAST);
-               if (tRes.success && tRes.data) { triageResult = { ...triageResult, ...tRes.data }; }
-           }
-
-           // 场馆规则：移到 System Prompt 走 Gemini Context Cache（server.js 对 >2000字 systemInstruction 自动建缓存, TTL 1小时）
-           // 这里只做一个"命中提示"，让 AI 重点关注对应章节，不再作为唯一注入源
            let venueHitHint = "";
            const matchedVenue = triageResult.matched_venue && venueRules.length > 0
                ? venueRules.find(v => {
@@ -747,33 +711,16 @@ function App() {
                }
            }
 
-           let dynamicContext = `
-           【系统情报 (Triage Intelligence)】：
-           - AI 初步判定诉求为：${triageResult.core_intent}
-           - 当前任务类型：${internalDraftRequest ? '运营内部话术生成/改写' : '业务问题回复'}
-           - 命中场馆：${triageResult.matched_venue || '无'}${venueHitHint}
-           - 需注意过滤的用户噪音：${triageResult.noise_detected?.length > 0 ? triageResult.noise_detected.join(', ') : '无'}
-           - 客观注单数据（如有）：${betContext || '无'}
-           - 赛事异常公告（如有）：${noticeContext || '无'}
-
-           *注意：请结合用户原始输入、客观注单数据、公告和 RAG 命中内容回复。不要暴露你的思考过程，直接给出可复制到群里的回复。如果注单未结算，在结尾加入 <<<ACTION_TRACK>>> 触发监控。涉及场馆规则、盘口规则、赔率计算、结算细则的问题，必须优先依据命中的知识条款；没有命中可靠条款时，不要编造，改为要求补充注单号、场馆、玩法、截图或转人工核实。历史 assistant 回复只能当作上下文，不能当作事实来源。*
-           `;
-
-           if (internalDraftRequest) {
-               dynamicContext += `
-
-           【内部话术生成规则】：
-           - 当前用户是运营人员在要求生成或改写话术，不是会员本人在咨询。
-           - 只输出最终可直接发送到群里的话术，不要写“建议话术如下”“请参考以下话术”。
-           - 不要再引导“联系在线客服”“以在线客服为准”“尝试申诉或核验”，除非用户最新输入明确要求这么引导，或 RAG 条款明确该业务必须走在线客服。
-           - 历史对话中的 assistant 回复可能是错误草稿，只能作为反面上下文；必须以用户最新纠正和最新要求为准。
-           - 如果用户明确说没有核验流程、客服不继续服务、不再提供娱乐服务，就按这个方向写克制、职业、结案式回复。
-           `;
-           }
-
+           setAiPhase('retrieval');
            let ragContext = { domain: 'general_policy', retrievalMode: 'none', results: [], prompt: '无' };
            try {
-               const ragQuery = buildRagQuery(currentUserMsg, currentFullHistory, triageResult, matchedVenue?.name || '');
+               const ragQuery = buildPolicyRagQuery({
+                   caseText: currentUserMsg,
+                   operatorInstruction: currentOperatorInstruction,
+                   history: chatHistoryRef.current,
+                   plan: executionPlan,
+                   venueName: matchedVenue?.name || '',
+               });
                ragContext = await window.fbOps.retrieveRagContext(ragQuery, {
                    coreIntent: triageResult.core_intent,
                    venue: matchedVenue?.name || '',
@@ -782,52 +729,44 @@ function App() {
                console.warn('RAG retrieval failed:', ragError);
            }
 
-           dynamicContext += `
-
-           【RAG 检索结果】：
-           - 检索域：${ragContext.domain || 'general_policy'}
-           - 检索模式：${ragContext.retrievalMode || 'fallback'}
-           - 命中知识条数：${Array.isArray(ragContext.results) ? ragContext.results.length : 0}
-           - 命中知识详情：
-           ${ragContext.prompt || '无'}
-
-           【事实来源优先级】：
-           1. 客观注单数据、赛事异常公告、RAG 命中知识。
-           2. 用户最新输入中的明确事实。
-           3. 历史对话仅用于理解用户在改什么，不得把 assistant 旧回复当成事实。
-           如果第 1、2 项没有足够依据，请明确要求补充材料或转人工核实，不要自行补全规则、流程、金额、结算原因。
-           `;
-
-           let redLinesContext = "";
-           const recentBads = trainingDataRef.current.filter(l => l.type === 'bad' && l.correction).slice(0, 3);
-           if (recentBads.length > 0) {
-               redLinesContext = "### 🚨 绝对操作红线 (历史教训)\n" + recentBads.map((l, i) => `${i+1}. 曾犯错: ${l.answer}\n纠正: ${l.correction}`).join("\n");
-           }
-
            setAiPhase('execution');
 
-           const staticSystemPrompt = [
-               chatBase,
-               businessRules,
-           ].filter(Boolean).join('\n\n');
+           const staticSystemPrompt = `你是开云博彩平台运营人员的执行助手，不是面向会员自主决策的客服机器人。
+运营在最新消息中给出的处理思路，决定本轮策略、立场、语气和输出格式；你必须执行，不能以通用客服习惯替换。
+云端人设和业务规则用于提供背景与事实，不得覆盖运营本轮明确指令。旧 assistant 回复可能是错稿。
 
-           const executionUserPrompt = `
-           ${redLinesContext}
-           ${dynamicContext}
-           
-           【用户原始输入内容】：${currentUserMsg}
-           `;
+<cloud_persona>
+${chatBase || '以职业、直接、可落地的方式协助运营处理问题。'}
+</cloud_persona>
 
-           const historyToSend = currentFullHistory.slice(0, -1).map(msg => {
-               let txt = msg.displayContent;
-               if (!txt && typeof msg.content === 'string') txt = msg.content;
-               return { role: msg.role === 'assistant' ? 'assistant' : 'user', content: txt || " " };
+<business_rules>
+${businessRules || '无额外业务规则'}
+</business_rules>`;
+
+           const verifiedContext = [
+               `业务意图：${triageResult.core_intent}`,
+               `任务类型：${internalDraftRequest ? '运营话术生成/改写' : executionPlan.task_type}`,
+               `命中场馆：${matchedVenue?.name || triageResult.matched_venue || '无'}${venueHitHint}`,
+               `客观注单数据：${betContext || '无'}`,
+               `赛事异常公告：${noticeContext || '无'}`,
+               currentTicketRes && !noticeContext ? '若客观注单确实未结算，可在答案末尾加入 <<<ACTION_TRACK>>>。' : '',
+               `RAG 检索模式：${ragContext.retrievalMode || 'none'}，命中 ${Array.isArray(ragContext.results) ? ragContext.results.length : 0} 条。`,
+           ].filter(Boolean).join('\n');
+           const executionUserPrompt = buildExecutionPrompt({
+               plan: executionPlan,
+               operatorInstruction: currentOperatorInstruction,
+               caseText: currentUserMsg,
+               verifiedContext,
+               ragPrompt: ragContext.prompt || '无',
+               correctionRules: '相关历史纠正已包含在检索知识中；只采用与本题匹配的纠正规则。',
            });
+
+           const historyToSend = selectConversationHistory(chatHistoryRef.current, 8);
 
            let finalContent = [];
            if (currentImages.length > 0) {
                currentImages.forEach(img => { finalContent.push({ inlineData: { mimeType: img.mimeType, data: img.data } }); });
-               finalContent.push({ text: `【临时控制指令】\n${executionUserPrompt}` });
+               finalContent.push({ text: executionUserPrompt });
            } else {
                finalContent.push({ text: executionUserPrompt });
            }
@@ -838,10 +777,21 @@ function App() {
                { role: 'user', content: finalContent }
            ];
 
+           setLastDebugInfo({
+               type: 'Operator Guided Chat',
+               mode: currentMode,
+               output_mode: currentOutputMode,
+               execution_plan: executionPlan,
+               rag_status: ragContext.retrievalMode || 'none',
+               rag_content: ragContext.prompt || '无',
+               history_count: historyToSend.length,
+               messages: execMessages,
+           });
+
            let hasTriggeredTracker = false;
            
-           const res = await callGeminiStream(execMessages, 0.4, (chunk, fullText) => { 
-               if (fullText.includes("<<<ACTION_TRACK>>>")) {
+           const res = await callGeminiStream(execMessages, currentMode === 'strict' ? 0.2 : 0.3, (_chunk, fullText, rawFullText) => {
+               if (rawFullText.includes("<<<ACTION_TRACK>>>")) {
                    const rawItem = currentTicketRes?.rawItem;
                    const isPending = rawItem && (rawItem.outcome === null || rawItem.outcome === 0 || rawItem.outcome === 1);
                    if (!hasTriggeredTracker && currentTicketRes && isPending && !noticeContext) {
@@ -853,20 +803,46 @@ function App() {
                const cleanText = fullText.replace(/<<<ACTION_TRACK>>>/g, "");
                setAiReply(cleanText); 
                if (cleanText.trim()) {
-                   updateAssistantMessage(cleanText, runTriage ? triageResult : null);
+                   updateAssistantMessage(cleanText, triageResult);
                }
-           }, MODE_FAST);
+           }, currentMode === 'strict' ? MODE_THINK : MODE_FAST);
 
            if (res.error) {
                const errMsg = "AI Error: " + res.error;
                setAiReply(errMsg);
-               finalizeAssistantMessage(errMsg, runTriage ? triageResult : null);
+               finalizeAssistantMessage(errMsg, triageResult);
            } else if (res.success && res.data) {
-               finalizeAssistantMessage(res.data, runTriage ? triageResult : null);
+               let finalAnswer = res.data.replace(/<<<ACTION_TRACK>>>/g, '').trim();
+               if (executionPlan.operator_led || executionPlan.must_not.length > 0) {
+                   setAiPhase('review');
+                   const reviewRes = await callGeminiJSON([
+                       { role: 'system', content: '你只负责验收回答是否执行运营本轮指令。发现偏离时直接给出修正版。只输出 JSON。' },
+                       { role: 'user', content: buildAdherenceReviewPrompt({
+                           plan: executionPlan,
+                           operatorInstruction: currentOperatorInstruction,
+                           answer: finalAnswer,
+                       }) },
+                   ], 0.1, MODE_FAST);
+                   if (reviewRes.success && reviewRes.data) {
+                       const review = normalizeAdherenceReview(reviewRes.data, finalAnswer);
+                       finalAnswer = review.answer;
+                       triageResult = {
+                           ...triageResult,
+                           adherence: review.corrected ? 'corrected' : (review.pass ? 'passed' : 'unverified'),
+                           adherence_violations: review.violations,
+                       };
+                   } else {
+                       triageResult = { ...triageResult, adherence: 'unverified' };
+                   }
+               } else {
+                   triageResult = { ...triageResult, adherence: 'not_required' };
+               }
+               setAiReply(finalAnswer);
+               finalizeAssistantMessage(finalAnswer, triageResult);
            } else {
                const fallbackMsg = 'AI 请求已结束，但没有得到明确结果。请稍后重试，或查看 Vercel 日志确认是否发生函数超时。';
                setAiReply(fallbackMsg);
-               finalizeAssistantMessage(fallbackMsg, runTriage ? triageResult : null);
+               finalizeAssistantMessage(fallbackMsg, triageResult);
            }
            if (res.usage) setLastUsage(res.usage);
           if (res.cacheAction) setLastCacheMeta({ action: res.cacheAction, model: res.cacheModel, thinkingLevel: res.thinkingLevel });
@@ -887,36 +863,42 @@ function App() {
     const executeSmartOptimization = async () => {
         if (!smartOptReason.trim()) return setNotification({title: '提示', message: '请告诉AI哪里错了，需要怎么改', type: 'error'});
         setIsSmartOptimizing(true);
-        
-        let targetInstruction = "";
-        if (smartOptTarget === 'base') targetInstruction = "【强制指令】：你只能修改【System Prompt (基础人设)】。保持业务逻辑完全不变。";
-        else if (smartOptTarget === 'rules') targetInstruction = "【强制指令】：你只能修改【业务硬性逻辑】。保持人设完全不变。";
-        else targetInstruction = "【指令】：请根据管理员的描述，自动判断应该修改人设还是业务逻辑。";
 
         const targetMsgContent = activeMsgIndex >= 0 && chatHistory[activeMsgIndex] ? (chatHistory[activeMsgIndex].displayContent || chatHistory[activeMsgIndex].content) : aiReply;
-        const lastInteraction = `【AI曾做出的回复】: ${targetMsgContent}\n【您的修改建议】: ${smartOptReason}`;
-        
-        const metaPrompt = `你是一个高级AI指令架构师。请根据管理员的【修改建议】，优化后台配置。\n${targetInstruction}\n【当前配置快照】:\n1. System Prompt:\n${chatBase}\n2. 业务硬性逻辑:\n${businessRules}\n【交互上下文】:\n${lastInteraction}\n【输出格式 (JSON Only)】:\n{ "updatedChatBase": "...", "updatedBusinessRules": "..." }`;
-        const messages = [ { role: 'system', content: 'You are an expert prompt engineer. Output JSON only.' }, { role: 'user', content: metaPrompt } ];
+        const metaPrompt = `你是运营规则整理员。把运营的纠正整理成一条独立、明确、可重复执行的规则。
+不得重写现有配置，不得加入运营没有表达的新流程。
+
+【目标位置】${smartOptTarget === 'auto' ? '请判断 rules（业务处理）或 base（表达风格）' : smartOptTarget}
+【AI 本次错误回复】${targetMsgContent}
+【运营纠正】${smartOptReason}
+
+仅输出 JSON：
+{ "target": "rules/base", "rule": "一条完整的正向规则，包含适用条件和正确做法" }`;
+        const messages = [ { role: 'system', content: '你只把运营纠正编译成一条原子规则。只输出 JSON。' }, { role: 'user', content: metaPrompt } ];
 
         try {
-            const res = await callGeminiJSON(messages, 1.0, MODE_THINK);
+            const res = await callGeminiJSON(messages, 0.2, MODE_FAST);
             if (res.success && res.data) {
-                const newChatBase = res.data.updatedChatBase || chatBase;
-                const newRules = res.data.updatedBusinessRules || businessRules;
-                
+                const target = smartOptTarget === 'auto'
+                    ? (res.data.target === 'base' ? 'base' : 'rules')
+                    : smartOptTarget;
+                const rule = String(res.data.rule || smartOptReason).trim();
+                if (!rule) throw new Error('未能整理出有效规则');
+                const datedRule = `【运营修正规则 ${new Date().toISOString().slice(0, 10)}】\n- ${rule}`;
+                const appendRule = (current) => current.includes(rule) ? current : [current.trim(), datedRule].filter(Boolean).join('\n\n');
+                const newChatBase = target === 'base' ? appendRule(chatBase) : chatBase;
+                const newRules = target === 'rules' ? appendRule(businessRules) : businessRules;
+
                 setChatBase(newChatBase);
                 setBusinessRules(newRules);
-                
                 await window.fbOps.saveCloudPrompts({ chat_base: newChatBase, business_rules: newRules });
-                
+
                 setShowSmartOptModal(false);
                 setSmartOptReason('');
-                setSmartOptTarget('auto'); 
-                setActiveTab('training'); 
-                setNotification({title: '进化成功', message: `已针对【${smartOptTarget === 'auto' ? '自动判断' : smartOptTarget}】完成专项修正！`, type: 'success'});
+                setSmartOptTarget('auto');
+                setNotification({title: '规则已追加', message: `已保存到${target === 'base' ? '表达风格' : '业务逻辑'}，不会重写原有配置。`, type: 'success'});
             } else { throw new Error("AI 生成格式异常，未应用。"); }
-        } catch(e) { setNotification({title: '进化失败', message: e.message, type: 'error'}); }
+        } catch(e) { setNotification({title: '规则保存失败', message: e.message, type: 'error'}); }
         setIsSmartOptimizing(false);
     };
 
@@ -966,7 +948,8 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
         updateActivity(); 
         const ans = chatHistory[idx].displayContent || chatHistory[idx].content;
         const q = idx > 0 ? chatHistory[idx - 1].displayContent || chatHistory[idx - 1].content : "多轮对话";
-        await window.fbOps.saveFeedback({ question: q, answer: ans, type: 'good' }); 
+        const feedback = { question: q, answer: ans, type: 'good', time: new Date().toLocaleString() };
+        await window.fbOps.saveFeedback(feedback);
         setNotification({title:'反馈成功', message:'已记录完美评价', type:'success'});
     };
 
@@ -974,16 +957,19 @@ const handleUploadImage = async () => { updateActivity(); if (!imageForm.file ||
         updateActivity(); 
         setActiveMsgIndex(idx);
         setFeedbackState('rating_bad'); 
-        setCorrectionText(chatHistory[idx].displayContent || chatHistory[idx].content); 
+        setCorrectionText('');
     }, [chatHistory]);
 
     const submitCorrectionMsg = React.useCallback(async () => { 
         updateActivity(); 
         if (!correctionText.trim()) return setNotification({title: '提示', message: '请修正内容', type: 'error'}); 
         const ans = chatHistory[activeMsgIndex].displayContent || chatHistory[activeMsgIndex].content;
+        if (correctionText.trim() === String(ans || '').trim()) {
+            return setNotification({title: '提示', message: '纠正内容不能与被否定的答案相同', type: 'error'});
+        }
         const q = activeMsgIndex > 0 ? chatHistory[activeMsgIndex - 1].displayContent || chatHistory[activeMsgIndex - 1].content : "多轮对话";
         const payload = { question: q, answer: ans, correction: correctionText, type: 'bad', time: new Date().toLocaleString() }; 
-        await window.fbOps.saveFeedback(payload); 
+        await window.fbOps.saveFeedback(payload);
         setActiveMsgIndex(-1);
         setFeedbackState('none');
         setNotification({title:'纠错成功', message:'已录入后台错题本', type:'success'});
@@ -1403,7 +1389,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                   <div className="flex justify-between items-center border-b pb-3">
                       <div className="flex items-center gap-2 text-purple-700">
                           <Icon d={PATHS.Brain} className="w-6 h-6"/>
-                          <h3 className="text-lg font-bold">AI 逻辑修正 (自我进化)</h3>
+                          <h3 className="text-lg font-bold">运营规则修正</h3>
                       </div>
                       <button onClick={() => setShowSmartOptModal(false)} className="text-slate-400 hover:text-slate-600"><Icon d={PATHS.Close} className="w-5 h-5"/></button>
                   </div>
@@ -1455,7 +1441,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                       {isSmartOptimizing ? (
                           <>
                               <div className="spinner border-white/30 border-t-white"></div>
-                               正在重写底层逻辑...
+                               正在整理修正规则...
                           </>
                       ) : (
                           <>
@@ -2038,7 +2024,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
           {/* ===== 话术/对话模块 (含多智能体) ===== */}
           {activeTab === 'scripts' && (
              <div className="absolute inset-0 flex flex-col md:flex-row">
-              <section className="w-full md:w-1/3 md:min-w-[320px] bg-white border-b md:border-b-0 md:border-r border-zinc-200 flex flex-col shadow-lg z-10 shrink-0 h-[40%] md:h-full overflow-hidden">
+              <section className="w-full md:w-1/3 md:min-w-[320px] bg-white border-b md:border-b-0 md:border-r border-zinc-200 flex flex-col shadow-lg z-10 shrink-0 h-[35%] md:h-full overflow-hidden">
                   <div className="p-2 md:p-3 border-b border-zinc-100 flex gap-2">
                       <div className="relative w-1/3 max-w-[130px]">
                         <button onClick={() => setIsCategoryOpen(!isCategoryOpen)} className="w-full h-10 bg-white border border-slate-200 text-slate-700 text-xs rounded-lg px-3 py-2 pr-7 outline-none text-left truncate flex items-center justify-between relative hover:border-indigo-300 transition">
@@ -2091,7 +2077,7 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
               </section>
 
               <section className="flex-1 p-2 md:p-6 flex flex-col gap-2 md:gap-4 min-h-0 relative" style={{background:'radial-gradient(700px 400px at 100% 0%, rgba(99,102,241,0.05), transparent 60%), radial-gradient(600px 400px at 0% 100%, rgba(236,72,153,0.04), transparent 60%), #f6f8fc'}}>
-                  <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 flex flex-col overflow-hidden relative min-h-[30vh]">
+                  <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 flex flex-col overflow-hidden relative min-h-[120px] md:min-h-[30vh]">
                       <div className="flex-1 p-3 md:p-5 overflow-y-auto custom-scrollbar flex flex-col gap-4">
                           {chatHistory.length === 0 ? (
                                <div className="h-full flex flex-col items-center justify-center fade-in text-slate-400">
@@ -2124,9 +2110,9 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                           {aiLoading && (
                                <div className="flex justify-start fade-in">
                                    <div className="p-3 rounded-2xl rounded-tl-sm bg-zinc-50 border border-zinc-200 text-slate-500 flex items-center gap-2 text-sm shadow-sm">
-                                       <div className={`spinner border-slate-300 ${aiPhase === 'triage' ? 'border-t-purple-600' : 'border-t-blue-600'}`} style={{width:16, height:16, borderWidth:2}}></div>
-                                       <span className={aiPhase === 'triage' ? 'text-purple-600 font-bold' : 'text-zinc-700 font-bold'}>
-                                           {aiPhase === 'triage' ? '分析中...' : '思考中...'}
+                                   <div className={`spinner border-slate-300 ${aiPhase === 'review' ? 'border-t-amber-500' : 'border-t-violet-600'}`} style={{width:16, height:16, borderWidth:2}}></div>
+                                       <span className={aiPhase === 'review' ? 'text-amber-600 font-bold' : 'text-violet-700 font-bold'}>
+                                           {getAiPhaseLabel(aiPhase)}
                                        </span>
                                    </div>
                                </div>
@@ -2139,10 +2125,10 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
 	                      <div className="px-3 py-2 border-b border-slate-50 bg-zinc-50/50 flex items-center justify-between">
 	                          <div className="flex items-center gap-2">
 	                              <Icon d={PATHS.Bot} className="text-slate-400 w-4 h-4"/>
-	                              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">双智能体输入区 (支持多模态粘贴)</span>
+	                              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">运营问答执行台</span>
 	                              <div className="hidden md:flex items-center rounded-lg border border-slate-200 bg-white p-0.5 ml-2">
-	                                  <button type="button" onClick={() => setChatPromptMode('strict')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition ${chatPromptMode === 'strict' ? 'bg-zinc-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>质检</button>
-	                                  <button type="button" onClick={() => setChatPromptMode('free')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition ${chatPromptMode === 'free' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>自由</button>
+	                                  <button type="button" onClick={() => setChatPromptMode('strict')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition ${chatPromptMode === 'strict' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>按思路执行</button>
+	                                  <button type="button" onClick={() => setChatPromptMode('free')} className={`px-2 py-1 rounded-md text-[10px] font-bold transition ${chatPromptMode === 'free' ? 'bg-zinc-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>自动处理</button>
 	                              </div>
 	                          </div>
 	                          {chatHistory.length > 0 && (
@@ -2150,6 +2136,20 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
 	                                  <Icon d={PATHS.Trash} className="w-3 h-3"/> 新话题 (清空历史)
                               </button>
                           )}
+                      </div>
+
+                      <div className={`px-3 py-2 border-b ${chatPromptMode === 'strict' ? 'bg-violet-50/80 border-violet-100' : 'bg-slate-50 border-slate-100'}`}>
+                          <div className="flex items-center justify-between mb-1">
+                              <span className={`text-[11px] font-bold ${chatPromptMode === 'strict' ? 'text-violet-700' : 'text-slate-500'}`}>我的处理思路 <span className="font-normal opacity-70">（本轮最高优先级）</span></span>
+                              {operatorInstruction && <button type="button" onClick={() => setOperatorInstruction('')} className="text-[10px] text-slate-400 hover:text-slate-600">清空</button>}
+                          </div>
+                          <textarea
+                              value={operatorInstruction}
+                              onChange={event => setOperatorInstruction(event.target.value)}
+                              onKeyDown={(event) => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) handleCallAI(); }}
+                              className="w-full min-h-[46px] max-h-20 md:max-h-28 resize-y rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-violet-200 placeholder:text-slate-300"
+                              placeholder="例如：按结案方向回复；不要再让会员提交资料；重点说明这是最终结果。"
+                          />
                       </div>
                       
                       {pastedImages.length > 0 && (
@@ -2171,16 +2171,23 @@ ${accumulated ? accumulated.substring(0, 12000) : '(当前场馆无已有规则)
                           onPaste={handlePaste}
                           onKeyDown={(e) => { if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { handleCallAI(); } }} 
                           className="w-full flex-1 p-3 text-sm md:text-base outline-none resize-none text-slate-700 placeholder:text-slate-300 min-h-[60px] md:min-h-[100px] custom-scrollbar" 
-                          placeholder="在此粘贴会员消息、注单截图或直接提问 (支持图文)..."
+                          placeholder="粘贴会员问题、聊天记录、注单内容或截图；这里放原始素材，不必重复处理思路..."
                       ></textarea>
                       
 	                      <div className="px-3 py-2 border-t border-slate-50 flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-white">
-	                          <div className="flex md:hidden items-center rounded-lg border border-slate-200 bg-white p-0.5">
-	                              <button type="button" onClick={() => setChatPromptMode('strict')} className={`flex-1 px-2 py-1.5 rounded-md text-xs font-bold transition ${chatPromptMode === 'strict' ? 'bg-zinc-800 text-white shadow-sm' : 'text-slate-500'}`}>质检模式</button>
-	                              <button type="button" onClick={() => setChatPromptMode('free')} className={`flex-1 px-2 py-1.5 rounded-md text-xs font-bold transition ${chatPromptMode === 'free' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500'}`}>自由模式</button>
+	                          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+	                              <div className="flex md:hidden items-center rounded-lg border border-slate-200 bg-white p-0.5">
+	                                  <button type="button" onClick={() => setChatPromptMode('strict')} className={`flex-1 px-2 py-1.5 rounded-md text-xs font-bold transition ${chatPromptMode === 'strict' ? 'bg-violet-600 text-white shadow-sm' : 'text-slate-500'}`}>按思路执行</button>
+	                                  <button type="button" onClick={() => setChatPromptMode('free')} className={`flex-1 px-2 py-1.5 rounded-md text-xs font-bold transition ${chatPromptMode === 'free' ? 'bg-zinc-800 text-white shadow-sm' : 'text-slate-500'}`}>自动处理</button>
+	                              </div>
+	                              <select value={chatOutputMode} onChange={event => setChatOutputMode(event.target.value)} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-bold text-slate-600 outline-none">
+	                                  <option value="reply">只要可发送话术</option>
+	                                  <option value="analysis_reply">分析 + 可发送话术</option>
+	                                  <option value="analysis">只做运营分析</option>
+	                              </select>
 	                          </div>
 	                          <button onClick={() => handleCallAI()} disabled={aiLoading} className="bg-zinc-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-zinc-900 disabled:opacity-50 transition-all transform active:scale-95 flex items-center gap-2 touch-target w-full md:w-auto justify-center" title="快捷键: Ctrl + Enter">
-	                              {aiLoading ? '分析中...' : <><Icon d={PATHS.Bot} className="w-4 h-4"/> {chatPromptMode === 'free' ? '自由发送' : '质检发送'} <span className="text-[10px] opacity-80 font-normal ml-1">(Ctrl+Enter)</span></>}
+	                              {aiLoading ? getAiPhaseLabel(aiPhase) : <><Icon d={PATHS.Bot} className="w-4 h-4"/> {chatPromptMode === 'free' ? '自动处理' : '按我的思路生成'} <span className="text-[10px] opacity-80 font-normal ml-1">(Ctrl+Enter)</span></>}
 	                          </button>
 	                      </div>
                   </div>

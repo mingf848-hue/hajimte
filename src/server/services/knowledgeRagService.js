@@ -15,6 +15,9 @@ const DOMAIN_DEFINITIONS = [
   { domain: 'internal_template', keywords: ['模板', '报备', '申请', '拉白', '下分', '代注册', '复审模板'] },
   { domain: 'general_policy', keywords: ['条款', '隐私', '规则与条款', '免责声明', '使用条件'] },
 ];
+const KNOWN_DOMAIN_KEYWORDS = new Set(
+  DOMAIN_DEFINITIONS.flatMap((item) => item.keywords).map((item) => item.toLowerCase()),
+);
 
 const INTENT_DOMAIN_MAP = {
   ACCOUNT_SECURITY: 'login_account',
@@ -111,6 +114,32 @@ function inferDomainFromCategory(category, keywords, content, fallback = 'genera
   return inferDomainFromText(text, fallback);
 }
 
+export function tokenizeSearchQuery(value) {
+  const normalized = normalizeString(value)
+    .toLowerCase()
+    .replace(/^(当前素材|检索重点|运营处理方向|近期相关素材|业务意图|场馆\/类别|注单号)\s*[：:]/gm, ' ');
+  const segments = normalized.match(/[a-z0-9][a-z0-9._-]*|[\u3400-\u9fff]{2,}/g) || [];
+  const tokens = new Set();
+
+  for (const segment of segments) {
+    if (segment.length <= 14) tokens.add(segment);
+    for (const keyword of KNOWN_DOMAIN_KEYWORDS) {
+      if (segment.includes(keyword)) tokens.add(keyword);
+    }
+
+    if (/^[\u3400-\u9fff]+$/.test(segment)) {
+      const maxLength = Math.min(segment.length, 24);
+      for (let size = 2; size <= 4; size += 1) {
+        for (let index = 0; index <= maxLength - size && tokens.size < 100; index += 1) {
+          tokens.add(segment.slice(index, index + size));
+        }
+      }
+    }
+  }
+
+  return [...tokens].filter(token => token.length >= 2).slice(0, 100);
+}
+
 function scoreLexicalMatch(doc, query) {
   const lowerQuery = normalizeString(query).toLowerCase();
   if (!lowerQuery) return 0;
@@ -126,14 +155,23 @@ function scoreLexicalMatch(doc, query) {
   if (tagsText.includes(lowerQuery)) score += 8;
   if (content.includes(lowerQuery)) score += 4;
 
-  for (const token of lowerQuery.split(/\s+/).filter(Boolean)) {
-    if (title.includes(token)) score += 4;
-    if (keywordsText.includes(token)) score += 3;
-    if (tagsText.includes(token)) score += 2;
-    if (content.includes(token)) score += 1;
+  for (const token of tokenizeSearchQuery(lowerQuery)) {
+    const weight = Math.min(token.length, 4);
+    if (title.includes(token)) score += 4 * weight;
+    if (keywordsText.includes(token)) score += 3 * weight;
+    if (tagsText.includes(token)) score += 2 * weight;
+    if (content.includes(token)) score += weight;
   }
 
   return score;
+}
+
+export function hasMeaningfulCorrectionMatch(unit, query) {
+  const haystack = compactTextParts([unit?.title, unit?.keywords, unit?.tags, unit?.content]).toLowerCase();
+  if (!haystack) return false;
+  return tokenizeSearchQuery(query).some((token) => (
+    (token.length >= 3 || KNOWN_DOMAIN_KEYWORDS.has(token)) && haystack.includes(token)
+  ));
 }
 
 async function embedText(text) {
@@ -376,6 +414,30 @@ async function runRawSourceFallbackSearch(db, { query, domain, venue, limit }) {
     .slice(0, limit);
 }
 
+async function runOperatorCorrectionSearch(db, { query, limit = 2 }) {
+  const docs = await db.collection('training_data').find({
+    type: 'bad',
+    correction: { $type: 'string', $ne: '' },
+  }).sort({ time: -1 }).limit(300).toArray();
+
+  return docs
+    .flatMap((doc) => buildKnowledgeUnitsForDocument('training_data', sourceDocToPlainObject(doc)))
+    .map((unit) => {
+      const score = hasMeaningfulCorrectionMatch(unit, query) ? scoreLexicalMatch(unit, query) : 0;
+      return {
+        ...unit,
+        score,
+        hybridScore: score + 100,
+        retrievalSource: 'operator_correction',
+        matchedBy: ['operator_correction'],
+        id: unit._id,
+      };
+    })
+    .filter((unit) => unit.score > 0)
+    .sort((a, b) => b.hybridScore - a.hybridScore)
+    .slice(0, limit);
+}
+
 export function buildKnowledgePrompt(results) {
   if (!Array.isArray(results) || results.length === 0) {
     return '无';
@@ -498,6 +560,15 @@ export async function retrieveKnowledgeContext({ query, coreIntent = '', venue =
     retrievalMode = results.length > 0 ? 'raw_source_broadened' : retrievalMode;
   }
 
+  try {
+    const corrections = await runOperatorCorrectionSearch(db, { query, limit: Math.min(2, limit) });
+    if (corrections.length > 0) {
+      const correctionIds = new Set(corrections.map((item) => String(item.id)));
+      results = [...corrections, ...results.filter((item) => !correctionIds.has(String(item.id)))].slice(0, limit);
+      retrievalMode = `${retrievalMode}+operator_corrections`;
+    }
+  } catch {}
+
   return {
     domain: domainHint,
     retrievalMode,
@@ -591,17 +662,22 @@ export function buildKnowledgeUnitsForDocument(sourceCollection, doc) {
   }
 
   if (sourceCollection === 'training_data') {
-    if (doc.type && doc.type !== 'good') return [];
-    const content = compactTextParts([`Q: ${doc.question || ''}`, `A: ${doc.answer || ''}`]);
+    const isCorrection = doc.type === 'bad' && normalizeString(doc.correction);
+    if (doc.type && doc.type !== 'good' && !isCorrection) return [];
+    // Never index the rejected answer: it anchors the model on the exact behavior
+    // the operator corrected. A bad case contributes only its question and standard.
+    const content = isCorrection
+      ? compactTextParts([`问题：${doc.question || ''}`, `运营纠正标准：${doc.correction}`])
+      : compactTextParts([`问题：${doc.question || ''}`, `正确话术：${doc.answer || ''}`]);
     const unit = makeBaseUnit({
       sourceCollection,
       sourceId: doc._id,
       domain: inferDomainFromText(content),
-      category: doc.type || 'training',
+      category: isCorrection ? 'operator_correction' : (doc.type || 'training'),
       title: doc.question,
-      keywords: doc.question,
+      keywords: compactTextParts([doc.question, isCorrection ? doc.correction : '']),
       content,
-      tags: [doc.type],
+      tags: [doc.type, isCorrection ? 'correction' : 'approved'],
     });
     return unit ? [unit] : [];
   }

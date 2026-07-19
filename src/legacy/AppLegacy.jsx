@@ -649,15 +649,27 @@ function App() {
                operatorInstruction: currentOperatorInstruction,
                outputMode: currentOutputMode,
                venueNames,
+               imageCount: currentImages.length,
            });
+           const plannerContent = currentImages.length > 0
+               ? [
+                   ...currentImages.map(img => ({ inlineData: { mimeType: img.mimeType, data: img.data } })),
+                   { text: plannerPrompt },
+               ]
+               : plannerPrompt;
            const plannerRes = await callGeminiJSON([
-               { role: 'system', content: '你只负责把运营的本轮要求编译成执行合同。不得过滤、弱化或反驳运营的明确处理思路。只输出 JSON。' },
-               { role: 'user', content: plannerPrompt },
+               { role: 'system', content: '你只负责把运营的本轮要求及本轮图片编译成执行合同。不得过滤、弱化或反驳运营的明确处理思路。附件状态显示已附图时，必须读取图片，禁止声称图片未提供。只输出 JSON。' },
+               { role: 'user', content: plannerContent },
            ], 0.1, MODE_FAST);
            const executionPlan = normalizeExecutionPlan(
                plannerRes.success ? plannerRes.data : null,
                fallbackPlan,
-               { operatorInstruction: currentOperatorInstruction, outputMode: currentOutputMode },
+               {
+                   operatorInstruction: currentOperatorInstruction,
+                   outputMode: currentOutputMode,
+                   hasImages: currentImages.length > 0,
+                   imageCount: currentImages.length,
+               },
            );
            const internalDraftRequest = executionPlan.task_type === 'DRAFT_REPLY'
                || executionPlan.task_type === 'REWRITE'
@@ -759,6 +771,7 @@ ${businessRules || '无额外业务规则'}
                verifiedContext,
                ragPrompt: ragContext.prompt || '无',
                correctionRules: '相关历史纠正已包含在检索知识中；只采用与本题匹配的纠正规则。',
+               imageCount: currentImages.length,
            });
 
            const historyToSend = selectConversationHistory(chatHistoryRef.current, 8);

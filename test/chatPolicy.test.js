@@ -5,6 +5,7 @@ import {
     buildPlannerPrompt,
     buildRagQuery,
     createFallbackExecutionPlan,
+    isLikelyContextualFollowUp,
     normalizeAdherenceReview,
     normalizeExecutionPlan,
     selectConversationHistory,
@@ -102,7 +103,8 @@ test('planner is told that the current turn already contains images', () => {
         imageCount: 1,
     });
 
-    assert.match(prompt, /本轮已附图片：1 张/);
+    assert.match(prompt, /当前消息新附图片：1 张/);
+    assert.match(prompt, /当前问题可用图片：1 张/);
     assert.match(prompt, /不得再写“未提供截图”/);
 });
 
@@ -130,6 +132,32 @@ test('execution prompt forbids requesting an image that is already attached', ()
     const plan = createFallbackExecutionPlan({ hasImages: true });
     const prompt = buildExecutionPrompt({ plan, imageCount: 2 });
 
-    assert.match(prompt, /本轮已附图片 2 张/);
+    assert.match(prompt, /当前问题可用图片 2 张/);
     assert.match(prompt, /不得声称未收到、看不到或要求会员再次提供图片/);
+});
+
+test('short button questions are recognized as contextual follow-ups', () => {
+    assert.equal(isLikelyContextualFollowUp('点取消是什么意思'), true);
+    assert.equal(isLikelyContextualFollowUp('那确认呢？'), true);
+    assert.equal(isLikelyContextualFollowUp('会员重新提交了一张完全不同的银行卡截图，请核实新的卡号是否正确'), false);
+});
+
+test('latest prior image is retained for a contextual follow-up', () => {
+    const history = [
+        {
+            role: 'user',
+            caseMaterial: '这个弹窗是什么，解释下',
+            content: [
+                { inlineData: { mimeType: 'image/png', data: 'popup-base64' } },
+                { text: '这个弹窗是什么，解释下' },
+            ],
+        },
+        { role: 'assistant', content: '该弹窗说明场馆处于锁定状态。' },
+    ];
+    const selected = selectConversationHistory(history, 8, { includeLatestUserImages: true });
+
+    assert.equal(selected.length, 2);
+    assert.equal(Array.isArray(selected[0].content), true);
+    assert.equal(selected[0].content[0].inlineData.data, 'popup-base64');
+    assert.equal(selected[1].content, '该弹窗说明场馆处于锁定状态。');
 });
